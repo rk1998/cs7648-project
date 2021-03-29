@@ -8,7 +8,6 @@ from nltk import word_tokenize
 nltk.download('punkt')
 
 from collections import Counter
-from scipy.sparse import csr_matrix
 import os
 import sys
 from sklearn.model_selection import train_test_split
@@ -98,6 +97,7 @@ class TwitterDataset:
         # labels, tweet_list = load_tweet_csv(twitter_csv_path)
         self.labels = data_frame['label'].values
         tweet_list = data_frame['text'].values
+        self.length = len(self.labels)
         # self.tweet_list = tweet_list
         if not vocab:
             self.vocab = Vocab()
@@ -109,13 +109,14 @@ class TwitterDataset:
             wordlist = [self.vocab.GetID(w.lower()) for w in word_tokenize(tweet) if self.vocab.GetID(w.lower()) >= 0]
             self.Xwordlist.append(wordlist)
 
+        self.vocab.Lock()
         index = np.arange(len(self.Xwordlist))
         np.random.shuffle(index) #randomly shuffle words and labels
         self.Xwordlist = [torch.LongTensor(self.Xwordlist[i]) for i in index]
         self.labels = self.labels[index]
 
 
-def load_twitter_data(tweet_filepath, split_percent=0.2):
+def load_twitter_data(tweet_filepath, split_percent=0.2, overfit=False):
     '''
     Loads twitter csv file, splits it into training, dev, and test data
     and returns them as TwitterDataset objects.
@@ -123,18 +124,27 @@ def load_twitter_data(tweet_filepath, split_percent=0.2):
     '''
     print("Splitting Data")
     train_data, dev_data, test_data = split_data(tweet_filepath, split_percent=split_percent)
+
     print("Converting to Indices")
-    train_dataset = TwitterDataset(train_data)
-    dev_dataset = TwitterDataset(dev_data, vocab=train_dataset.vocab)
-    test_dataset = TwitterDataset(test_data, vocab=train_dataset.vocab)
+    if overfit:
+        train_dataset = TwitterDataset(train_data[0:100])
+        dev_dataset = TwitterDataset(dev_data[0:100], vocab=train_dataset.vocab)
+        test_dataset = TwitterDataset(test_data[0:100], vocab=train_dataset.vocab)
+    else:
+        train_dataset = TwitterDataset(train_data[0:100])
+        dev_dataset = TwitterDataset(dev_data[0:100], vocab=train_dataset.vocab)
+        test_dataset = TwitterDataset(test_data[0:100], vocab=train_dataset.vocab)
     return train_dataset, dev_dataset, test_dataset
 
 
 
 def main():
     twitter_csv_path = "..\\twitter_test.csv"
-    train_dataset, dev_data, test_dataset = load_twitter_data(twitter_csv_path, split_percent=0.3)
+    train_dataset, dev_data, test_dataset = load_twitter_data(twitter_csv_path, split_percent=0.3, overfit=True)
     # tweet_data = TwitterDataset(twitter_csv_path)
+    print(train_dataset.length)
+    print(dev_data.length)
+    print(test_dataset.length)
     print(train_dataset.Xwordlist[0].tolist())
     print([train_dataset.vocab.GetWord(x) for x in train_dataset.Xwordlist[0].tolist()])
     print(train_dataset.labels[0])
