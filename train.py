@@ -25,17 +25,30 @@ def parse_args():
     return args
 
 
-def eval_network(data, net, use_gpu=False):
+def eval_network(data, net, use_gpu=False, batch_size=25):
+    print("Evaluation Set")
     num_correct = 0
     Y = (data.labels + 1.0) / 2.0
     X = data.Xwordlist
-    padded_X, mask = pad_batch_input(X)
-    if use_gpu and torch.cuda.is_available():
-        padded_X = padded_X.cuda()
-    y_hat = net.forward(padded_X)
-    predictions = y_hat.argmax(dim=1)
-    diff = torch.abs(predictions.cpu() - Y)
-    num_correct = torch.sum((diff == 0).int())
+    batch_accuracies = []
+    for batch in tqdm.tqdm(range(0, len(X), batch_size), leave=False):
+        batch_x = pad_batch_input(X[batch:batch + batch_size])
+        batch_y = Y[batch:batch + batch_size]
+        if use_gpu and torch.cuda.is_available():
+            batch_x = batch_x.cuda()
+        batch_y_hat = net.forward(batch_x)
+        predictions = batch_y_hat.argmax(dim=1)
+        num_correct = float((predictions.cpu().numpy() == batch_y).sum())
+        accuracy = num_correct/float(batch_size)
+        batch_accuracies.append(accuracy)
+
+    # padded_X, mask = pad_batch_input(X)
+    # if use_gpu and torch.cuda.is_available():
+    #     padded_X = padded_X.cuda()
+    # y_hat = net.forward(padded_X)
+    # predictions = y_hat.argmax(dim=1)
+    # diff = torch.abs(predictions.cpu() - Y)
+    # num_correct = torch.sum((diff == 0).int())
     # for i in range(0, len(X), batch_size):
     #
     #
@@ -47,8 +60,10 @@ def eval_network(data, net, use_gpu=False):
     #     pred = torch.argmax(logProbs)
     #     if pred == Y[i]:
     #         num_correct += 1
-    print("Eval Accuracy: %s" % (float(num_correct) / float(len(X))))
-    return (float(num_correct) / float(len(X)))
+    # accuracy = float(num_correct) / float(len(X))
+    accuracy = np.mean(np.array(batch_accuracies))
+    print("Eval Accuracy: %s" % accuracy)
+    return accuracy
 
 def convert_to_onehot(Y_list, NUM_CLASSES=2):
     Y_onehot = torch.zeros((len(Y_list), NUM_CLASSES))
@@ -60,8 +75,8 @@ def convert_to_onehot(Y_list, NUM_CLASSES=2):
 
 def pad_batch_input(X_list):
     X_padded = torch.nn.utils.rnn.pad_sequence([torch.as_tensor(l) for l in X_list], batch_first=True).type(torch.LongTensor)
-    X_mask   = torch.nn.utils.rnn.pad_sequence([torch.as_tensor([1.0] * len(l)) for l in X_list], batch_first=True).type(torch.FloatTensor)
-    return (X_padded, X_mask)
+    # X_mask   = torch.nn.utils.rnn.pad_sequence([torch.as_tensor([1.0] * len(l)) for l in X_list], batch_first=True).type(torch.FloatTensor)
+    return X_padded
 
 
 
@@ -80,7 +95,7 @@ def train_network(net, X, Y, num_epochs, dev, batchSize=50, use_gpu=False):
         for batch in tqdm.tqdm(range(0, len(X), batchSize), leave=False):
             batch_tweets = X[batch:batch + batchSize]
             batch_labels = Y[batch:batch + batchSize]
-            batch_tweets, batch_mask = pad_batch_input(batch_tweets)
+            batch_tweets = pad_batch_input(batch_tweets)
             batch_onehot_labels = convert_to_onehot(batch_labels, NUM_CLASSES=num_classes)
             if use_gpu and torch.cuda.is_available():
               batch_tweets = batch_tweets.cuda()
@@ -88,17 +103,16 @@ def train_network(net, X, Y, num_epochs, dev, batchSize=50, use_gpu=False):
             net.zero_grad()
             batch_y_hat = net.forward(batch_tweets)
             # batch_y_hat = batch_y_hat*batch_mask
-            batch_losses = torch.neg(batch_y_hat)*batch_onehot_labels
+            batch_losses = torch.neg(batch_y_hat)*batch_onehot_labels #cross entropy loss
             loss = batch_losses.mean()
-            # loss = torch.neg(batch_y_hat).dot(batch_onehot_labels) #cross entropy loss
-            total_loss += loss
+            total_loss += float(loss)
             loss.backward()
             optimizer.step()
             #TODO: compute gradients, do parameter update, compute loss.
         epoch_losses.append(total_loss)
         net.eval()    #Switch to eval mode
         print(f"loss on epoch {epoch} = {total_loss}")
-        accuracy = eval_network(dev, net, use_gpu=use_gpu)
+        accuracy = eval_network(dev, net, use_gpu=use_gpu, batch_size=batchSize)
         eval_accuracy.append(accuracy)
 
     print("Finished Training")
@@ -109,7 +123,7 @@ def main():
     args = parse_args()
     twitter_csv_path = args.tweet_csv_file
     device_type = args.device
-    train_data, dev_data, test_data = load_twitter_data(twitter_csv_path, split_percent=0.002, overfit=False)
+    train_data, dev_data, test_data = load_twitter_data(twitter_csv_path, split_percent=0.01, overfit=True)
     print(train_data.length)
     print(dev_data.length)
     print(test_data.length)
@@ -121,11 +135,18 @@ def main():
                                         (train_data.labels + 1.0)/2.0,
                                         10, dev_data,
                                         batchSize=50, use_gpu=True)
+        cnn_net.eval()
+        test_accuracy = eval_network(test_data, cnn_net, use_gpu=True)
+
     else:
         epoch_losses, eval_accuracy = train_network(cnn_net,
                                         train_data.Xwordlist,
                                         (train_data.labels + 1.0)/2.0,
                                         10, dev_data,
                                         batchSize=50, use_gpu=False)
+        cnn_net.eval()
+        test_accuracy = eval_network(test_data, cnn_net, use_gpu=False, batch_size=batchSize)
+
+
 if __name__ == '__main__':
     main()
