@@ -16,6 +16,9 @@ from sklearn.model_selection import train_test_split
 def load_tweet_csv(tweet_csv_path):
     data = pd.read_csv(tweet_csv_path)
     labels = data['label'].values
+    labels[labels == 0] = -1
+    labels[labels == 2] = 0
+    labels[labels == 4] = 1
     tweets = data['text'].values
     # tweet_lists = split_tweets_to_lists(tweets.values)
     return labels, tweets
@@ -127,13 +130,14 @@ def load_twitter_data(tweet_filepath, split_percent=0.2, overfit=False):
 
     print("Converting to Indices")
     if overfit:
-        train_dataset = TwitterDataset(train_data[0:100])
-        dev_dataset = TwitterDataset(dev_data[0:100], vocab=train_dataset.vocab)
-        test_dataset = TwitterDataset(test_data[0:100], vocab=train_dataset.vocab)
+        print("Returning Overfit set")
+        train_dataset = TwitterDataset(train_data[0:500])
+        dev_dataset = TwitterDataset(dev_data[0:500], vocab=train_dataset.vocab)
+        test_dataset = TwitterDataset(test_data[0:500], vocab=train_dataset.vocab)
     else:
-        train_dataset = TwitterDataset(train_data[0:100])
-        dev_dataset = TwitterDataset(dev_data[0:100], vocab=train_dataset.vocab)
-        test_dataset = TwitterDataset(test_data[0:100], vocab=train_dataset.vocab)
+        train_dataset = TwitterDataset(train_data)
+        dev_dataset = TwitterDataset(dev_data, vocab=train_dataset.vocab)
+        test_dataset = TwitterDataset(test_data, vocab=train_dataset.vocab)
     return train_dataset, dev_dataset, test_dataset
 
 
