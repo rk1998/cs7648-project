@@ -131,9 +131,9 @@ def load_twitter_data(tweet_filepath, split_percent=0.2, overfit=False):
     print("Converting to Indices")
     if overfit:
         print("Returning Overfit set")
-        train_dataset = TwitterDataset(train_data[0:15000])
-        dev_dataset = TwitterDataset(dev_data[0:15000], vocab=train_dataset.vocab)
-        test_dataset = TwitterDataset(test_data[0:15000], vocab=train_dataset.vocab)
+        train_dataset = TwitterDataset(train_data[0:45000])
+        dev_dataset = TwitterDataset(dev_data[0:45000], vocab=train_dataset.vocab)
+        test_dataset = TwitterDataset(test_data[0:45000], vocab=train_dataset.vocab)
     else:
         train_dataset = TwitterDataset(train_data)
         dev_dataset = TwitterDataset(dev_data, vocab=train_dataset.vocab)

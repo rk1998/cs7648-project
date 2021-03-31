@@ -4,9 +4,10 @@ import torch.nn as nn
 import torch.optim as optim
 from load_data import load_twitter_data, TwitterDataset
 from cnn_model import CNN
+from plot_results import plot_accuracy, plot_losses
 import tqdm
 import argparse
-import matplotlib.pyplot as plt
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -61,9 +62,13 @@ def eval_network(data, net, use_gpu=False, batch_size=25):
     #     if pred == Y[i]:
     #         num_correct += 1
     # accuracy = float(num_correct) / float(len(X))
-    accuracy = np.mean(np.array(batch_accuracies))
+    batch_accuracies = np.array(batch_accuracies)
+    accuracy = batch_accuracies.mean()
+    min_accuracy = batch_accuracies.min()
+    max_accuracy = batch_accuracies.max()
+
     print("Eval Accuracy: %s" % accuracy)
-    return accuracy
+    return min_accuracy, accuracy, max_accuracy
 
 def convert_to_onehot(Y_list, NUM_CLASSES=2):
     Y_onehot = torch.zeros((len(Y_list), NUM_CLASSES))
@@ -88,6 +93,8 @@ def train_network(net, X, Y, num_epochs, dev, batchSize=50, use_gpu=False):
     num_classes = len(set(Y))
     epoch_losses = []
     eval_accuracy = []
+    min_eval_accuracies = []
+    max_eval_accuracies = []
     for epoch in range(num_epochs):
         num_correct = 0
         total_loss = 0.0
@@ -112,40 +119,48 @@ def train_network(net, X, Y, num_epochs, dev, batchSize=50, use_gpu=False):
         epoch_losses.append(total_loss)
         net.eval()    #Switch to eval mode
         print(f"loss on epoch {epoch} = {total_loss}")
-        accuracy = eval_network(dev, net, use_gpu=use_gpu, batch_size=batchSize)
+        min_acc, accuracy, max_acc = eval_network(dev, net, use_gpu=use_gpu, batch_size=batchSize)
         eval_accuracy.append(accuracy)
+        min_eval_accuracies.append(min_acc)
+        max_eval_accuracies.append(max_acc)
 
     print("Finished Training")
-    return epoch_losses, eval_accuracy
+    return epoch_losses, min_eval_accuracies, max_eval_accuracies eval_accuracy
 
 
 def main():
     args = parse_args()
     twitter_csv_path = args.tweet_csv_file
     device_type = args.device
-    train_data, dev_data, test_data = load_twitter_data(twitter_csv_path, split_percent=0.01, overfit=True)
+    train_data, dev_data, test_data = load_twitter_data(twitter_csv_path, split_percent=0.05, overfit=True)
     print(train_data.length)
     print(dev_data.length)
     print(test_data.length)
     cnn_net = CNN(train_data.vocab.GetVocabSize(), DIM_EMB=300, NUM_CLASSES = 2)
     if device_type == "gpu" and torch.cuda.is_available():
         cnn_net = cnn_net.cuda()
-        epoch_losses, eval_accuracy = train_network(cnn_net,
+        epoch_losses, min_accs, max_accs, eval_accuracy = train_network(cnn_net,
                                         train_data.Xwordlist,
                                         (train_data.labels + 1.0)/2.0,
                                         10, dev_data,
-                                        batchSize=50, use_gpu=True)
+                                        batchSize=100, use_gpu=True)
         cnn_net.eval()
         test_accuracy = eval_network(test_data, cnn_net, use_gpu=True)
 
     else:
-        epoch_losses, eval_accuracy = train_network(cnn_net,
+        epoch_losses, min_accs, max_accs, eval_accuracy = train_network(cnn_net,
                                         train_data.Xwordlist,
                                         (train_data.labels + 1.0)/2.0,
                                         10, dev_data,
-                                        batchSize=50, use_gpu=False)
+                                        batchSize=100, use_gpu=False)
         cnn_net.eval()
         test_accuracy = eval_network(test_data, cnn_net, use_gpu=False, batch_size=batchSize)
+
+
+    plot_losses(epoch_losses, "Sentiment CNN", train_data.length)
+    plot_accuracy((min_accs, eval_accuracy, max_accs), "Sentiment CNN", train_data.length)
+
+
 
 
 if __name__ == '__main__':
