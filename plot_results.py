@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 def plot_accuracy(accuracy_results, model_name, training_set_size):
-    min_accs, accs, max_accs
+    min_accs, accs, max_accs = accuracy_results
     plt.figure()
     plt.plot(accs, 'ro-')
     plt.fill_between(list(range(len(accs))), min_accs, max_accs, alpha=0.3, color='r')

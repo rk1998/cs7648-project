@@ -22,8 +22,9 @@ class CNN(nn.Module):
 
     def forward(self, X):
         out1  = self.embedding(X)
+        out1 = self.dropout(out1)
         out1 = out1.reshape((out1.shape[0], out1.shape[2], out1.shape[1]))
-        
+
         conv_out_1 = self.relu(self.conv1(out1))
         conv_out_2 = self.relu(self.conv2(out1))
         conv_out_3 = self.relu(self.conv3(out1))
