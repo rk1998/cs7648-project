@@ -31,7 +31,7 @@ def load_tweet_csv(tweet_csv_path, overfit=True, overfit_val=5000):
     # tweet_lists = split_tweets_to_lists(tweets.values)
     return labels, tweets
 
-def split_data(tweet_csv_path, split_percent=0.2, overfit=False, overfit_val=5000):
+def split_data(tweet_csv_path, test_split_percent=0.2, val_split_percent=0.2, overfit=False, overfit_val=5000):
     '''
     Splits Twitter Data into Training, Dev, and Test sets
     returns them as pandas dataframes
@@ -41,9 +41,9 @@ def split_data(tweet_csv_path, split_percent=0.2, overfit=False, overfit_val=500
     np.random.shuffle(indices)
     labels = labels[indices]
     tweets = tweets[indices]
-    X_train, X_test, y_train, y_test = train_test_split(tweets, labels, test_size=split_percent)
+    X_train, X_test, y_train, y_test = train_test_split(tweets, labels, test_size=test_split_percent)
     test_data = pd.DataFrame({'label': y_test, 'text':X_test})
-    X_train, X_dev, y_train, y_dev = train_test_split(X_train, y_train, test_size=split_percent)
+    X_train, X_dev, y_train, y_dev = train_test_split(X_train, y_train, test_size=val_split_percent)
     dev_data = pd.DataFrame({'label': y_dev, 'text':X_dev})
     train_data = pd.DataFrame({'label':y_train, 'text':X_train})
     return train_data, dev_data, test_data
@@ -127,14 +127,14 @@ class TwitterDataset:
         self.labels = self.labels[index]
 
 
-def load_twitter_data(tweet_filepath, split_percent=0.2, overfit=False, overfit_val=500):
+def load_twitter_data(tweet_filepath, test_split_percent=0.2, val_split_percent=0.2, overfit=False, overfit_val=500):
     '''
     Loads twitter csv file, splits it into training, dev, and test data
     and returns them as TwitterDataset objects.
 
     '''
     print("Splitting Data")
-    train_data, dev_data, test_data = split_data(tweet_filepath, split_percent=split_percent, overfit=overfit, overfit_val=overfit_val)
+    train_data, dev_data, test_data = split_data(tweet_filepath, test_split_percent=test_split_percent, val_split_percent=val_split_percent, overfit=overfit, overfit_val=overfit_val)
 
     print("Converting to Indices")
     if overfit:
