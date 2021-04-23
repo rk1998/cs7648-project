@@ -96,6 +96,24 @@ class Vocab:
     def GetWords(self):
         return self.word2id.keys()
 
+
+    def convert_to_words(self, word_ids):
+        """
+        Converts a list of word ids to their actual words in the vocabulary
+        Inputs:
+        word_ids: list(int) - list of word ids
+        Returns:
+        str: the output string from the list of word ids
+        """
+        output = ""
+        for i in range(len(word_ids)):
+            word_i = self.GetWord(word_ids[i])
+            if i == 0:
+                output = word_i
+            else:
+                output = output + " " + word_i
+        return output
+
     def Lock(self):
         self.locked = True
 
@@ -148,18 +166,40 @@ def load_twitter_data(tweet_filepath, test_split_percent=0.2, val_split_percent=
         test_dataset = TwitterDataset(test_data, vocab=train_dataset.vocab)
     return train_dataset, dev_dataset, test_dataset
 
+def load_twitter_data_active_learning(tweet_filepath, test_split_percent=0.2, val_split_percent=0.2, seed_size=1000, overfit=False, overfit_val=500):
+    train_data, dev_data, test_data = split_data(tweet_filepath,
+                                                 test_split_percent=test_split_percent,
+                                                 val_split_percent=val_split_percent,
+                                                 overfit=overfit,
+                                                 overfit_val=overfit_val)
+
+    train_dataset = TwitterDataset(train_data)
+    seed_data = pd.DataFrame({'label':train_data['label'][0:seed_size], 'text':train_data['text'][0:seed_size]})
+    unlabeled_data = pd.DataFrame({'label':train_data['label'][seed_size:], 'text':train_data['text'][seed_size:]})
+
+    seed_dataset = TwitterDataset(seed_data, vocab=train_dataset.vocab)
+    unlabeled_data = TwitterDataset(unlabeled_data, vocab=train_dataset.vocab)
+    dev_dataset = TwitterDataset(dev_data, vocab=train_dataset.vocab)
+    test_dataset = TwitterDataset(test_data, vocab=train_dataset.vocab)
+    return seed_dataset, unlabeled_data, dev_dataset, test_dataset
+
+
 
 
 def main():
     twitter_csv_path = "..\\twitter_test.csv"
-    train_dataset, dev_data, test_dataset = load_twitter_data(twitter_csv_path, split_percent=0.3, overfit=True)
+    # train_dataset, dev_data, test_dataset = load_twitter_data(twitter_csv_path, split_percent=0.3, overfit=True)
+    seed_dataset, unlabeled_dataset, dev_dataset, test_dataset = load_twitter_data_active_learning(twitter_csv_path, test_split_percent=0.2, overfit=True, overfit_val=12000)
     # tweet_data = TwitterDataset(twitter_csv_path)
-    print(train_dataset.length)
-    print(dev_data.length)
+    print(seed_dataset.length)
+    print(unlabeled_dataset.length)
+    print(dev_dataset.length)
     print(test_dataset.length)
-    print(train_dataset.Xwordlist[0].tolist())
-    print([train_dataset.vocab.GetWord(x) for x in train_dataset.Xwordlist[0].tolist()])
-    print(train_dataset.labels[0:10])
+    print(seed_dataset.Xwordlist[2].tolist())
+    # print(train_dataset.Xwordlist[0].tolist())
+    print([seed_dataset.vocab.GetWord(x) for x in seed_dataset.Xwordlist[2].tolist()])
+    print(seed_dataset.labels[2])
+    print(seed_dataset.labels[0:10])
 
 if __name__ == '__main__':
     main()

@@ -44,15 +44,9 @@ def eval_network(data, net, use_gpu=False, batch_size=25, device=torch.device('c
         # accuracy = num_correct/float(batch_size)
         # batch_accuracies.append(accuracy)
     predictions = torch.cat(batch_predictions)
-    print(predictions.shape)
     Y_tensor = torch.tensor(Y, device=device)
-    print(Y_tensor.shape)
     num_correct = float((predictions == Y_tensor).sum())
     accuracy = num_correct/len(Y)
-    # batch_accuracies = np.array(batch_accuracies)
-    # accuracy = batch_accuracies.mean()
-    # min_accuracy = batch_accuracies.min()
-    # max_accuracy = batch_accuracies.max()
 
     print("Eval Accuracy: %s" % accuracy)
     return accuracy
@@ -92,18 +86,14 @@ def train_network(net, X, Y, num_epochs, dev, lr=0.001, batchSize=50, use_gpu=Fa
             batch_labels = Y[batch:batch + batchSize]
             batch_tweets = pad_batch_input(batch_tweets, device=device)
             batch_onehot_labels = convert_to_onehot(batch_labels, NUM_CLASSES=num_classes, device=device)
-            # if use_gpu and torch.cuda.is_available():
-            #   batch_tweets = batch_tweets.cuda()
-            #   batch_onehot_labels = batch_onehot_labels.cuda()
             optimizer.zero_grad()
             batch_y_hat = net.forward(batch_tweets)
-            # batch_y_hat = batch_y_hat*batch_mask
             batch_losses = torch.neg(batch_y_hat)*batch_onehot_labels #cross entropy loss
             loss = batch_losses.mean()
             loss.backward()
             optimizer.step()
             total_loss += float(loss.detach().item())
-            #TODO: compute gradients, do parameter update, compute loss.
+
         epoch_losses.append(total_loss)
         net.eval()    #Switch to eval mode
         print(f"loss on epoch {epoch} = {total_loss}")
@@ -116,7 +106,6 @@ def train_network(net, X, Y, num_epochs, dev, lr=0.001, batchSize=50, use_gpu=Fa
 
     print("Finished Training")
     return epoch_losses, eval_accuracy
-    # return epoch_losses, min_eval_accuracies, max_eval_accuracies, eval_accuracy
 
 
 def main():
