@@ -48,7 +48,11 @@ def label_data(data_samples, vocab):
         sample_i = data_samples[i][0]
         tweet = vocab.convert_to_words(sample_i)
         print(tweet + "\n")
-        label = int(input("Enter Sentiment:  "))
+        label = input("Enter Sentiment:  ")
+        try:
+            label = int(label)
+        except:
+            label=1
         if label != 1 and label != 0:
             label = 1
         labels.append(label)
@@ -158,10 +162,13 @@ def train_active_learning(net, vocab, X_seed, Y_seed, X_unlabeled, dev, num_epoc
         epoch_losses.append(total_loss)
         eval_accuracy.append(accuracy)
         if len(X_unlabeled) > 0:
-            samples_to_label, X_unlabeled = compute_acquisition_function(net, acquisition_func, X_unlabeled, num_samples=50, batch_size=batchSize, device=device)
+            samples_to_label, X_unlabeled = compute_acquisition_function(net, acquisition_func, X_unlabeled, num_samples=num_samples, batch_size=batchSize, device=device)
             new_labels = label_data(samples_to_label, vocab)
             X_samples = [torch.LongTensor(sample) for sample, score in samples_to_label]
-            hand_labeled_data.append((samples_to_label, new_labels))
+            for i in range(len(samples_to_label)):
+                sample = samples_to_label[i]
+                label = new_labels[i]
+                hand_labeled_data.append((sample, label))
             for sample_tensor in X_samples:
                 X_seed.append(sample_tensor)
             Y_seed = np.concatenate((Y_seed, new_labels))
@@ -175,18 +182,7 @@ def train_active_learning(net, vocab, X_seed, Y_seed, X_unlabeled, dev, num_epoc
 
     print("Finished Training")
 
-    human_labels = []
-    tweets = []
-
-    for sample, label in hand_labeled_data:
-        tweet = vocab.convert_to_words(sample)
-        tweets.append(tweet)
-        human_labels.append(label)
-
-    new_labeled_tweets = pd.DataFrame({'label':human_labels, 'text':tweets})
-    new_labeled_tweets.to_csv("human_labeled_tweets.csv", header=True, index=False)
-
-    return epoch_losses, eval_accuracy
+    return epoch_losses, eval_accuracy, hand_labeled_data
 
 def main():
     args = parse_args()
@@ -212,10 +208,10 @@ def main():
     if device_type == "gpu" and torch.cuda.is_available():
         device = torch.device('cuda:0')
         cnn_net = cnn_net.cuda()
-        epoch_losses, eval_accuracy = train_active_learning(cnn_net, vocab,
+        epoch_losses, eval_accuracy, hand_labeled_data = train_active_learning(cnn_net, vocab,
                                                             X_seed, Y_seed,
                                                             X_unlabeled, dev_data,
-                                                            num_epochs=5, acquisition_func=acquisition_func,
+                                                            num_epochs=1, acquisition_func=acquisition_func,
                                                             lr=0.003, batchSize=100, num_samples=100,
                                                             use_gpu=True, device=device)
         cnn_net.eval()
@@ -225,10 +221,10 @@ def main():
     else:
         device = torch.device('cpu')
         cnn_net = cnn_net.cuda()
-        epoch_losses, eval_accuracy = train_active_learning(cnn_net, vocab,
+        epoch_losses, eval_accuracy, hand_labeled_data = train_active_learning(cnn_net, vocab,
                                                             X_seed, Y_seed,
                                                             X_unlabeled, dev_data,
-                                                            num_epochs=5, acquisition_function=acquisition_func,
+                                                            num_epochs=1, acquisition_function=acquisition_func,
                                                             lr=0.003, batchSize=100, num_samples=100,
                                                             use_gpu=True, device=device)
         cnn_net.eval()
@@ -242,6 +238,20 @@ def main():
     torch.save(cnn_net.state_dict(), "saved_models\\cnn.pth")
     np.save("cnn_active_learning_train_loss" + acquistion_function_type + ".npy", np.array(epoch_losses))
     np.save("cnn_active_learning_validation_accuracy" + acquistion_function_type + ".npy1", np.array(eval_accuracy))
+
+    human_labels = []
+    tweets = []
+
+    for sample, label in hand_labeled_data:
+        tweet, score = sample
+        tweet = vocab.convert_to_words(tweet)
+        tweets.append(tweet)
+        human_labels.append(label)
+
+    new_labeled_tweets = pd.DataFrame({'label':human_labels, 'text':tweets})
+    new_labeled_tweets.to_csv("human_labeled_tweets.csv", header=True, index=False)
+
+
     # np.save("cnn_validation_accuracies.npy", np.array([min_accs, max_accs, eval_accuracy]))
 
 
