@@ -49,6 +49,8 @@ def label_data(data_samples, vocab):
         tweet = vocab.convert_to_words(sample_i)
         print(tweet + "\n")
         label = int(input("Enter Sentiment:  "))
+        if label != 1 and label != 0:
+            label = 1
         labels.append(label)
     print(labels)
     print(len(labels))
@@ -149,6 +151,7 @@ def train_active_learning(net, vocab, X_seed, Y_seed, X_unlabeled, dev, num_epoc
     num_classes = len(set(Y_seed))
     epoch_losses = []
     eval_accuracy = []
+    hand_labeled_data = []
     for epoch in range(num_epochs):
         print("EPOCH: " + str(epoch))
         total_loss, accuracy = train_step(net, X_seed, Y_seed, epoch, dev, optimizer, num_classes=num_classes, batchSize=batchSize, use_gpu=use_gpu, device=device)
@@ -158,6 +161,7 @@ def train_active_learning(net, vocab, X_seed, Y_seed, X_unlabeled, dev, num_epoc
             samples_to_label, X_unlabeled = compute_acquisition_function(net, acquisition_func, X_unlabeled, num_samples=50, batch_size=batchSize, device=device)
             new_labels = label_data(samples_to_label, vocab)
             X_samples = [torch.LongTensor(sample) for sample, score in samples_to_label]
+            hand_labeled_data.append((samples_to_label, new_labels))
             for sample_tensor in X_samples:
                 X_seed.append(sample_tensor)
             Y_seed = np.concatenate((Y_seed, new_labels))
@@ -170,6 +174,18 @@ def train_active_learning(net, vocab, X_seed, Y_seed, X_unlabeled, dev, num_epoc
             print("All Data Labelled")
 
     print("Finished Training")
+
+    human_labels = []
+    tweets = []
+
+    for sample, label in hand_labeled_data:
+        tweet = vocab.convert_to_words(sample)
+        tweets.append(tweet)
+        human_labels.append(label)
+
+    new_labeled_tweets = pd.DataFrame({'label':human_labels, 'text':tweets})
+    new_labeled_tweets.to_csv("human_labeled_tweets.csv", header=True, index=False)
+
     return epoch_losses, eval_accuracy
 
 def main():
@@ -199,8 +215,8 @@ def main():
         epoch_losses, eval_accuracy = train_active_learning(cnn_net, vocab,
                                                             X_seed, Y_seed,
                                                             X_unlabeled, dev_data,
-                                                            num_epochs=2, acquisition_func=acquisition_func,
-                                                            lr=0.003, batchSize=100, num_samples=50,
+                                                            num_epochs=5, acquisition_func=acquisition_func,
+                                                            lr=0.003, batchSize=100, num_samples=100,
                                                             use_gpu=True, device=device)
         cnn_net.eval()
         print("Test Set")
@@ -212,8 +228,8 @@ def main():
         epoch_losses, eval_accuracy = train_active_learning(cnn_net, vocab,
                                                             X_seed, Y_seed,
                                                             X_unlabeled, dev_data,
-                                                            num_epochs=2, acquisition_function=acquisition_func,
-                                                            lr=0.003, batchSize=100, num_samples=50,
+                                                            num_epochs=5, acquisition_function=acquisition_func,
+                                                            lr=0.003, batchSize=100, num_samples=100,
                                                             use_gpu=True, device=device)
         cnn_net.eval()
         print("Test Set")
@@ -224,8 +240,8 @@ def main():
     plot_accuracy(eval_accuracy, "Sentiment CNN (Active Learning) lr=0.003", train_data.length)
     plot_losses(epoch_losses, "Sentiment CNN (Active Learning) lr=0.003", train_data.length)
     torch.save(cnn_net.state_dict(), "saved_models\\cnn.pth")
-    np.save("cnn_active_learning_train_loss.npy", np.array(epoch_losses))
-    np.save("cnn_active_learning_validation_accuracy.npy", np.array(eval_accuracy))
+    np.save("cnn_active_learning_train_loss" + acquistion_function_type + ".npy", np.array(epoch_losses))
+    np.save("cnn_active_learning_validation_accuracy" + acquistion_function_type + ".npy1", np.array(eval_accuracy))
     # np.save("cnn_validation_accuracies.npy", np.array([min_accs, max_accs, eval_accuracy]))
 
 
