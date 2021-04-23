@@ -31,6 +31,11 @@ def load_tweet_csv(tweet_csv_path, overfit=True, overfit_val=5000):
     # tweet_lists = split_tweets_to_lists(tweets.values)
     return labels, tweets
 
+def load_unlabeled_tweet_csv(tweet_csv_path, num_tweets=50000):
+    data = pd.read_csv(tweet_csv_path)
+    tweets = data['text'].values
+    return tweets
+
 def split_data(tweet_csv_path, test_split_percent=0.2, val_split_percent=0.2, overfit=False, overfit_val=5000):
     '''
     Splits Twitter Data into Training, Dev, and Test sets
@@ -143,6 +148,14 @@ class TwitterDataset:
         np.random.shuffle(index) #randomly shuffle words and labels
         self.Xwordlist = [torch.LongTensor(self.Xwordlist[i]) for i in index]
         self.labels = self.labels[index]
+
+    def convert_text_to_ids(self, text_list):
+        id_list = []
+        for item in text_list:
+            wordlist = [self.vocab.GetID(w.lower()) for w in word_tokenize(item) if self.vocab.GetID(w.lower()) >= 0]
+            id_list.append(wordlist)
+        id_list = [torch.LongTensor(id_list[i]) for i in range(0, len(id_list))]
+        return id_list
 
 
 def load_twitter_data(tweet_filepath, test_split_percent=0.2, val_split_percent=0.2, overfit=False, overfit_val=500):
