@@ -112,19 +112,19 @@ def main():
     args = parse_args()
     twitter_csv_path = args.tweet_csv_file
     device_type = args.device
-    train_data, dev_data, test_data = load_twitter_data(twitter_csv_path, test_split_percent=0.1, val_split_percent=0.2, overfit=True, overfit_val=50000)
-    print(train_data.length)
-    print(dev_data.length)
-    print(test_data.length)
-    cnn_net = CNN(train_data.vocab.GetVocabSize(), DIM_EMB=300, NUM_CLASSES = 2)
+    use_bert = True
+    train_data, dev_data, test_data = load_twitter_data(twitter_csv_path, test_split_percent=0.1, val_split_percent=0.2, overfit=True, use_bert=use_bert, overfit_val=50000)
+    vocab_size = train_data.vocab_size
+    print(vocab_size)
+    cnn_net = CNN(vocab_size, DIM_EMB=300, NUM_CLASSES = 2)
     if device_type == "gpu" and torch.cuda.is_available():
         device = torch.device('cuda:0')
         cnn_net = cnn_net.cuda()
         epoch_losses, eval_accuracy = train_network(cnn_net,
                                         train_data.Xwordlist,
                                         (train_data.labels + 1.0)/2.0,
-                                        5, dev_data, lr=0.003,
-                                        batchSize=100, use_gpu=True, device=device)
+                                        10, dev_data, lr=0.003,
+                                        batchSize=150, use_gpu=True, device=device)
         cnn_net.eval()
         print("Test Set")
         test_accuracy = eval_network(test_data, cnn_net, use_gpu=True, device=device)
@@ -134,8 +134,8 @@ def main():
         epoch_losses, eval_accuracy = train_network(cnn_net,
                                         train_data.Xwordlist,
                                         (train_data.labels + 1.0)/2.0,
-                                        5, dev_data, lr=0.003,
-                                        batchSize=100, use_gpu=False, device=device)
+                                        10, dev_data, lr=0.003,
+                                        batchSize=150, use_gpu=False, device=device)
         cnn_net.eval()
         print("Test Set")
         test_accuracy = eval_network(test_data, cnn_net, use_gpu=False, batch_size=batchSize, device=device)

@@ -32,7 +32,7 @@ def main(args):
     )
     test_dataset = load_dataset("sentiment140", split="test").shuffle()
     tokenizer = BertWordPieceTokenizer(
-        "data/bert-base-uncased-vocab.txt", lowercase=True
+        "bert-base-uncased-vocab.txt", lowercase=True
     )
 
     train_dataset = train_dataset.map(lambda e: preprocess(e, tokenizer), num_proc=4)
@@ -62,6 +62,8 @@ def main(args):
     )
 
     if args.action.lower() == "train":
+        print("VOCAB SIZE")
+        print(tokenizer.get_vocab_size())
         model = SentimentLSTM(
             embedding_dim=args.embedding_dim,
             hidden_dim=args.hidden_dim,
