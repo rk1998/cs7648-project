@@ -207,15 +207,16 @@ def main():
 
 
     seed_data_size = args.seed_data_size
-    use_bert = False
+    use_bert = True
     train_data, dev_data, test_data = load_twitter_data(labeled_twitter_csv_path, test_split_percent=0.1, val_split_percent=0.2, overfit=True, use_bert=use_bert, overfit_val=50000)
     unlabeled_tweets = load_unlabeled_tweet_csv(unlabeled_twitter_csv_path)
-    X_unlabeled = train_data.convert_text_to_ids(unlabeled_tweets)[0:70000]
+    X_unlabeled = train_data.convert_text_to_ids(unlabeled_tweets)[0:50000]
 
     X_seed = train_data.Xwordlist[0:seed_data_size]
     Y_seed = train_data.labels[0:seed_data_size]
     Y_seed = (Y_seed + 1.0)/2.0
 
+    print(train_data.vocab_size)
 
     cnn_net = CNN(train_data.vocab_size, DIM_EMB=300, NUM_CLASSES = 2)
     if device_type == "gpu" and torch.cuda.is_available():
@@ -224,8 +225,8 @@ def main():
         epoch_losses, eval_accuracy, hand_labeled_data = train_active_learning(cnn_net, train_data,
                                                             X_seed, Y_seed,
                                                             X_unlabeled, dev_data,
-                                                            num_epochs=10, acquisition_func=acquisition_func,
-                                                            lr=0.003, batchSize=150, num_samples=15,
+                                                            num_epochs=2, acquisition_func=acquisition_func,
+                                                            lr=0.0035, batchSize=150, num_samples=15,
                                                             use_gpu=True, device=device)
         cnn_net.eval()
         print("Test Set")
@@ -233,12 +234,12 @@ def main():
 
     else:
         device = torch.device('cpu')
-        cnn_net = cnn_net.cuda()
+        # cnn_net = cnn_net.cuda()
         epoch_losses, eval_accuracy, hand_labeled_data = train_active_learning(cnn_net, train_data,
                                                             X_seed, Y_seed,
                                                             X_unlabeled, dev_data,
-                                                            num_epochs=10, acquisition_function=acquisition_func,
-                                                            lr=0.003, batchSize=150, num_samples=15,
+                                                            num_epochs=2, acquisition_func=acquisition_func,
+                                                            lr=0.0035, batchSize=150, num_samples=15,
                                                             use_gpu=True, device=device)
         cnn_net.eval()
         print("Test Set")
@@ -246,26 +247,25 @@ def main():
 
 
     # plot_accuracy((min_accs, eval_accuracy, max_accs), "Sentiment CNN lr=0.001", train_data.length)
-    plot_accuracy(eval_accuracy, "Sentiment CNN (Active Learning) lr=0.003 " + acquistion_function_type, train_data.length)
-    plot_losses(epoch_losses, "Sentiment CNN (Active Learning) lr=0.003 " + acquistion_function_type, train_data.length)
+    plot_accuracy(eval_accuracy, "Sentiment CNN (Active Learning) lr=0.0035 " + acquistion_function_type, train_data.length)
+    plot_losses(epoch_losses, "Sentiment CNN (Active Learning) lr=0.0035" + acquistion_function_type, train_data.length)
     torch.save(cnn_net.state_dict(), "saved_models\\cnn_active_learn.pth")
-    np.save("cnn_active_learning_train_loss" + acquistion_function_type + "_" + str(seed_data_size) + ".npy", np.array(epoch_losses))
-    np.save("cnn_active_learning_validation_accuracy" + acquistion_function_type + "_" + str(seed_data_size) + ".npy", np.array(eval_accuracy))
+    np.save("cnn_active_learning_train_loss_bert" + acquistion_function_type + "_" + str(seed_data_size) + ".npy", np.array(epoch_losses))
+    np.save("cnn_active_learning_validation_accuracy_bert" + acquistion_function_type + "_" + str(seed_data_size) + ".npy", np.array(eval_accuracy))
 
     human_labels = []
     tweets = []
+    save_labels = False
+    
+    if save_labels:
+        for sample, label in hand_labeled_data:
+            tweet, score = sample
+            tweet = train_data.convert_to_words(tweet)
+            tweets.append(tweet)
+            human_labels.append(label)
 
-    for sample, label in hand_labeled_data:
-        tweet, score = sample
-        tweet = train_data.convert_to_words(tweet)
-        tweets.append(tweet)
-        human_labels.append(label)
-
-    new_labeled_tweets = pd.DataFrame({'label':human_labels, 'text':tweets})
-    new_labeled_tweets.to_csv("human_labeled_tweets.csv", header=True, index=False)
-
-
-    # np.save("cnn_validation_accuracies.npy", np.array([min_accs, max_accs, eval_accuracy]))
+        new_labeled_tweets = pd.DataFrame({'label':human_labels, 'text':tweets})
+        new_labeled_tweets.to_csv("human_labeled_tweets.csv", header=True, index=False)
 
 
 

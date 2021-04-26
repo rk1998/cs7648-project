@@ -156,7 +156,7 @@ class TwitterDataset:
         else:
             self.vocab_size = self.vocab.GetVocabSize()
 
-        # self.vocab.Lock()
+        self.vocab.Lock()
         index = np.arange(len(self.Xwordlist))
         np.random.shuffle(index) #randomly shuffle words and labels
         self.Xwordlist = [torch.LongTensor(self.Xwordlist[i]) for i in index]
@@ -171,7 +171,7 @@ class TwitterDataset:
                 id_list.append(wordlist)
         else:
             for item in text_list:
-                wordlist = tokenizer.encode(item).ids
+                # wordlist = tokenizer.encode(item).ids
                 wordlist = [self.vocab.GetID(w.lower()) for w in word_tokenize(item) if self.vocab.GetID(w.lower()) >= 0]
                 id_list.append(wordlist)
         id_list = [torch.LongTensor(id_list[i]) for i in range(0, len(id_list))]
@@ -182,8 +182,8 @@ class TwitterDataset:
             tweet = tokenizer.decode(id_list)
         else:
             output = ""
-            for i in range(len(word_ids)):
-                word_i = self.vocab.GetWord(word_ids[i])
+            for i in range(len(id_list)):
+                word_i = self.vocab.GetWord(id_list[i])
                 if i == 0:
                     output = word_i
                 else:
