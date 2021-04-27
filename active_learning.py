@@ -31,21 +31,19 @@ def parse_args():
         choices=["cpu", "gpu"],
         default="cpu",
     )
-    parser.add_argument("--acquisition_func", type=str, choices=["least_confidence", "random"], default="least_confidence")
+    parser.add_argument("--acquisition_func", type=str, choices=["least_confidence", "random", "entropy"], default="least_confidence")
     parser.add_argument("--seed_data_size", type=int, default=9000)
     args = parser.parse_args()
     return args
-
-
-
 
 
 def label_data(data_samples, vocab, use_human_labels=False):
     """
     List of input tweets selected by sampling strategy to be hand-labeled
     Inputs:
-    data_sample: list(tuple) - list of tokenized tweets and their scores that
+    data_sample: list(tuple) - list of tokenized tweets, their scores, and ground truth labels
     vocab: TwitterDataset - object containing the vocabulary mappings of the tweet data
+    use_human_labels - if true, a person will provide labels, if false, use the ground truth labels
     Returns:
     list(int) - list of sentiment labels for each tweet (either 0 or 1)
     """
@@ -64,8 +62,11 @@ def label_data(data_samples, vocab, use_human_labels=False):
             if label != 1 and label != 0:
                 label = 1
             labels.append(label)
+    else:
+        for i in range(len(data_samples)):
+            label_i = data_samples[i][2]
+            labels.append(label_i)
     print(labels)
-    print(len(labels))
     return labels
 
 def random_score(model_outputs):
@@ -107,7 +108,7 @@ def least_confidence(model_outputs, num_classes=2):
     normalized_scores = confidence_scores*(num_classes/(num_classes - 1))
     return normalized_scores
 
-def compute_acquisition_function(model, acquisition_function, X, num_samples=100, batch_size=50, reverse=True, device=torch.device('cpu')):
+def compute_acquisition_function(model, acquisition_function, X, labels, num_samples=100, batch_size=50, reverse=True, device=torch.device('cpu')):
     """
     Computes the acquisition_function on the unlabeled data samples to
     determine which samples will be hand labeled.
@@ -130,6 +131,7 @@ def compute_acquisition_function(model, acquisition_function, X, num_samples=100
     model.eval()
     for batch in tqdm.tqdm(range(0, len(X), batch_size), leave=False):
         batch_sentences = X[batch:batch + batch_size]
+        batch_labels = labels[batch:batch+batch_size]
         padded_batch = pad_batch_input(batch_sentences, device=device)
         batch_scores = model.forward(padded_batch)
         acquisition_scores = acquisition_function(batch_scores)
@@ -137,16 +139,18 @@ def compute_acquisition_function(model, acquisition_function, X, num_samples=100
             input_sentence = batch_sentences[j]
             input_sentence = input_sentence.tolist()
             score = acquisition_scores[j].item()
-            scored_samples.append((input_sentence, score))
+            label = batch_labels[j]
+            scored_samples.append((input_sentence, score, label))
 
     scored_samples.sort(reverse=reverse, key=lambda x: x[1])
     if num_samples > len(scored_samples):
-        return samples, []
+        return samples, [], []
     else:
         samples = scored_samples[0:num_samples]
         unused_samples = scored_samples[num_samples: ]
-        X_unlabeled = [torch.LongTensor(sentence) for sentence, score in unused_samples]
-        return samples, X_unlabeled
+        X_unlabeled = [torch.LongTensor(sentence) for sentence, score, label in unused_samples]
+        labels = [label for sentence, score, label in unused_samples]
+        return samples, X_unlabeled, labels
 
 
 def train_step(net, X, Y, epoch_num, dev, optimizer, num_classes=2, batchSize=50, use_gpu=False, device=torch.device('cpu')):
@@ -177,7 +181,7 @@ def train_step(net, X, Y, epoch_num, dev, optimizer, num_classes=2, batchSize=50
 
 
 
-def train_active_learning(net, vocab, X_seed, Y_seed, X_unlabeled, dev, num_epochs=15, acquisition_func=least_confidence, lr=0.001, batchSize=50, num_samples=100, use_gpu=False, device=torch.device('cpu')):
+def train_active_learning(net, vocab, X_seed, Y_seed, X_unlabeled, Y_gt, dev, num_epochs=15, human_label=False, acquisition_func=least_confidence, lr=0.001, batchSize=50, num_samples=100, use_gpu=False, device=torch.device('cpu')):
     """
     Main active learning training loop
     """
@@ -197,11 +201,11 @@ def train_active_learning(net, vocab, X_seed, Y_seed, X_unlabeled, dev, num_epoc
         # epoch_losses.append(total_loss)
         # eval_accuracy.append(accuracy)
         if len(X_unlabeled) > 0:
-            samples_to_label, X_unlabeled = compute_acquisition_function(net, acquisition_func, X_unlabeled, num_samples=num_samples, batch_size=batchSize, device=device)
-            new_labels = label_data(samples_to_label, vocab)
-            X_samples = [torch.LongTensor(sample) for sample, score in samples_to_label]
+            samples_to_label, X_unlabeled, Y_gt = compute_acquisition_function(net, acquisition_func, X_unlabeled, Y_gt, num_samples=num_samples, batch_size=batchSize, device=device)
+            new_labels = label_data(samples_to_label, vocab, use_human_labels=human_label)
+            X_samples = [torch.LongTensor(sample) for sample, score, label in samples_to_label]
             for i in range(len(samples_to_label)):
-                sample = samples_to_label[i]
+                sample, score, label = samples_to_label[i]
                 label = new_labels[i]
                 hand_labeled_data.append((sample, label))
             for sample_tensor in X_samples:
@@ -235,6 +239,8 @@ def main():
         acquisition_func = least_confidence
     elif acquistion_function_type == "random":
         acquisition_func = random_score
+    elif acquistion_function_type == "entropy":
+        acquisition_func = entropy_score
     else:
         acquisition_func = least_confidence
 
@@ -243,8 +249,12 @@ def main():
     use_bert = False
     shuffle = False
     train_data, dev_data, test_data = load_twitter_data(labeled_twitter_csv_path, test_split_percent=0.1, val_split_percent=0.2, shuffle=shuffle, overfit=True, use_bert=use_bert, overfit_val=12639)
-    unlabeled_tweets = load_unlabeled_tweet_csv(unlabeled_twitter_csv_path)
+    unlabeled_tweets, ground_truth_labels = load_unlabeled_tweet_csv(unlabeled_twitter_csv_path)
+
+    #convert "unlabeled" tweets to token ids
     X_unlabeled = train_data.convert_text_to_ids(unlabeled_tweets)[0:70000]
+    ground_truth_labels = ground_truth_labels[0:70000]
+    ground_truth_labels = (ground_truth_labels + 1.0)/2.0
 
     X_seed = train_data.Xwordlist[0:seed_data_size]
     Y_seed = train_data.labels[0:seed_data_size]
@@ -261,9 +271,9 @@ def main():
         cnn_net = cnn_net.cuda()
         epoch_losses, eval_accuracy, hand_labeled_data = train_active_learning(cnn_net, train_data,
                                                             X_seed, Y_seed,
-                                                            X_unlabeled, dev_data,
-                                                            num_epochs=10, acquisition_func=acquisition_func,
-                                                            lr=0.0050, batchSize=150, num_samples=10,
+                                                            X_unlabeled, ground_truth_labels, dev_data,
+                                                            num_epochs=2, acquisition_func=acquisition_func,
+                                                            lr=0.0030, batchSize=150, num_samples=10,
                                                             use_gpu=True, device=device)
         cnn_net.eval()
         print("Test Set")
@@ -274,9 +284,9 @@ def main():
         # cnn_net = cnn_net.cuda()
         epoch_losses, eval_accuracy, hand_labeled_data = train_active_learning(cnn_net, train_data,
                                                             X_seed, Y_seed,
-                                                            X_unlabeled, dev_data,
+                                                            X_unlabeled, ground_truth_labels, dev_data,
                                                             num_epochs=10, acquisition_func=acquisition_func,
-                                                            lr=0.0050, batchSize=150, num_samples=10,
+                                                            lr=0.0030, batchSize=150, num_samples=10,
                                                             use_gpu=False, device=device)
         cnn_net.eval()
         print("Test Set")
@@ -284,10 +294,10 @@ def main():
 
 
     # plot_accuracy((min_accs, eval_accuracy, max_accs), "Sentiment CNN lr=0.001", train_data.length)
-    plot_accuracy(eval_accuracy, "Sentiment CNN (Active Learning) lr=0.0050 " + acquistion_function_type, train_data.length)
-    plot_losses(epoch_losses, "Sentiment CNN (Active Learning) lr=0.0050" + acquistion_function_type, train_data.length)
+    plot_accuracy(eval_accuracy, "Sentiment CNN (Active Learning) lr=0.0030 " + acquistion_function_type, train_data.length)
+    plot_losses(epoch_losses, "Sentiment CNN (Active Learning) lr=0.0030" + acquistion_function_type, train_data.length)
     torch.save(cnn_net.state_dict(), "saved_models\\cnn_active_learn.pth")
-    np.save("cnn_active_learning_train_loss" + acquistion_function_type + "_" + str(seed_data_size) + ".npy", np.array(epoch_losses))
+    # np.save("cnn_active_learning_train_loss" + acquistion_function_type + "_" + str(seed_data_size) + ".npy", np.array(epoch_losses))
     np.save("cnn_active_learning_validation_accuracy" + acquistion_function_type + "_" + str(seed_data_size) + ".npy", np.array(eval_accuracy))
 
     human_labels = []
@@ -295,8 +305,8 @@ def main():
     save_labels = True
 
     if save_labels:
-        for sample, label in hand_labeled_data:
-            tweet, score = sample
+        for tweet, label in hand_labeled_data:
+            # tweet, score = sample
             tweet = train_data.convert_to_words(tweet)
             tweets.append(tweet)
             human_labels.append(label)

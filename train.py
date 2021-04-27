@@ -35,8 +35,6 @@ def eval_network(data, net, use_gpu=False, batch_size=25, device=torch.device('c
     for batch in tqdm.tqdm(range(0, len(X), batch_size), leave=False):
         batch_x = pad_batch_input(X[batch:batch + batch_size], device=device)
         batch_y = torch.tensor(Y[batch:batch + batch_size], device=device)
-        # if use_gpu and torch.cuda.is_available():
-        #     batch_x = batch_x.cuda()
         batch_y_hat = net.forward(batch_x)
         predictions = batch_y_hat.argmax(dim=1)
         batch_predictions.append(predictions)
@@ -44,6 +42,7 @@ def eval_network(data, net, use_gpu=False, batch_size=25, device=torch.device('c
         # accuracy = num_correct/float(batch_size)
         # batch_accuracies.append(accuracy)
     predictions = torch.cat(batch_predictions)
+    predictions = predictions.type(torch.float64)
     Y_tensor = torch.tensor(Y, device=device)
     num_correct = float((predictions == Y_tensor).sum())
     accuracy = num_correct/len(Y)

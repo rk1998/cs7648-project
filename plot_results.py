@@ -61,12 +61,28 @@ def compare_accuracy_results(results_1, results_2, label1="baseline", label2="AL
     plt.show()
 
 
+def compare_multiple_results(results_list, labels, colors, title="Twitter Dataset Accuracy Comparison"):
+    plt.figure()
+    for i in range(len(results_list)):
+        result = results_list[i]
+        label = labels[i]
+        color_tag = colors[i]
+        plt.plot(result, color_tag, label=label)
+
+    plt.title(title)
+    plt.xlabel("Epochs")
+    plt.ylabel("Validation Accuracy")
+    plt.legend()
+    plt.show()
+
+
+
 def main():
     result1_file = "cnn_active_learning_validation_accuracyleast_confidence_9000.npy"
-    result2_file = "cnn_validation_accuracy_9100.npy"
+    result2_file = "cnn_active_learning_validation_accuracyrandom_9000.npy"
     result1 = np.load(result1_file)
     result2 = np.load(result2_file)
-    compare_accuracy_results(result1, result2, label1="CNN AL (Least Confidence)", label2 = "CNN Baseline")
+    compare_accuracy_results(result1, result2, label1="CNN AL (Least Confidence)", label2 = "CNN AL (Random)")
     # csv_file_path = "metrics.csv"
     # model_name = "LSTM + BERT"
     # plot_results_from_csv(csv_file_path, model_name=model_name)

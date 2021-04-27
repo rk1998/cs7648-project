@@ -41,7 +41,11 @@ def load_tweet_csv(tweet_csv_path, overfit=True, shuffle_data=True, overfit_val=
 def load_unlabeled_tweet_csv(tweet_csv_path, num_tweets=50000):
     data = pd.read_csv(tweet_csv_path)
     tweets = data['text'].values
-    return tweets
+    labels = data['label'].values
+    labels[labels == 0] = -1
+    labels[labels == 2] = 0
+    labels[labels == 4] = 1
+    return tweets, labels
 
 def split_data(tweet_csv_path, test_split_percent=0.2, val_split_percent=0.2, shuffle=True, overfit=False, overfit_val=5000):
     '''
