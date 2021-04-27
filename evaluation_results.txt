@@ -1,0 +1,5 @@
+CNN-Supervised learning Eval Accuracy: 0.59
+CNN-Active Learning (LC) Eval Accuracy: 0.54
+CNN-Active Learning (Random) Eval Accuracy: 0.55
+CNN-Active Learning (Entropy) Eval Accuracy: 0.58
+LSTM-Supervised learning Eval Accuracy: 0.7
