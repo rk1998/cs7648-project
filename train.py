@@ -112,10 +112,14 @@ def main():
     args = parse_args()
     twitter_csv_path = args.tweet_csv_file
     device_type = args.device
-    use_bert = True
-    train_data, dev_data, test_data = load_twitter_data(twitter_csv_path, test_split_percent=0.1, val_split_percent=0.2, overfit=True, use_bert=use_bert, overfit_val=50000)
+    use_bert = False
+    shuffle = False
+    train_data, dev_data, test_data = load_twitter_data(twitter_csv_path, test_split_percent=0.1, val_split_percent=0.2, overfit=True, shuffle=shuffle, use_bert=use_bert, overfit_val=12639)
     vocab_size = train_data.vocab_size
     print(vocab_size)
+    print(train_data.length)
+    print(dev_data.length)
+    print(test_data.length)
     cnn_net = CNN(vocab_size, DIM_EMB=300, NUM_CLASSES = 2)
     if device_type == "gpu" and torch.cuda.is_available():
         device = torch.device('cuda:0')
@@ -144,8 +148,8 @@ def main():
     plot_accuracy(eval_accuracy, "Sentiment CNN lr=0.003", train_data.length)
     plot_losses(epoch_losses, "Sentiment CNN lr=0.003", train_data.length)
     torch.save(cnn_net.state_dict(), "saved_models\\cnn.pth")
-    np.save("cnn_train_loss.npy", np.array(epoch_losses))
-    np.save("cnn_validation_accuracy.npy", np.array(eval_accuracy))
+    np.save("cnn_train_loss_" + str(train_data.length) +  ".npy", np.array(epoch_losses))
+    np.save("cnn_validation_accuracy_" + str(train_data.length) +  ".npy", np.array(eval_accuracy))
     # np.save("cnn_validation_accuracies.npy", np.array([min_accs, max_accs, eval_accuracy]))
 
 

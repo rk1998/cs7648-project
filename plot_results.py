@@ -49,10 +49,27 @@ def plot_losses(loss_results, model_name, training_set_size):
     plt.ylabel("Loss")
     plt.show()
 
+
+def compare_accuracy_results(results_1, results_2, label1="baseline", label2="AL (Least Confidence)"):
+    plt.figure()
+    plt.plot(results_1, "ro-", label=label1)
+    plt.plot(results_2, "bo-", label=label2)
+    plt.title("Twitter Dataset Accuracy Comparison")
+    plt.xlabel("Epochs")
+    plt.ylabel("Validation Accuracy")
+    plt.legend()
+    plt.show()
+
+
 def main():
-    csv_file_path = "metrics.csv"
-    model_name = "LSTM + BERT"
-    plot_results_from_csv(csv_file_path, model_name=model_name)
+    result1_file = "cnn_active_learning_validation_accuracy_bertleast_confidence_9000.npy"
+    result2_file = "cnn_validation_accuracy_9100.npy"
+    result1 = np.load(result1_file)
+    result2 = np.load(result2_file)
+    compare_accuracy_results(result1, result2, label1="CNN AL (Least Confidence)", label2 = "CNN Baseline")
+    # csv_file_path = "metrics.csv"
+    # model_name = "LSTM + BERT"
+    # plot_results_from_csv(csv_file_path, model_name=model_name)
 
 if __name__ == '__main__':
     main()

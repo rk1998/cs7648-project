@@ -15,21 +15,25 @@ from sklearn.model_selection import train_test_split
 
 tokenizer = BertWordPieceTokenizer("bert-base-uncased-vocab.txt", lowercase=True)
 
-def load_tweet_csv(tweet_csv_path, overfit=True, overfit_val=5000):
-    data = pd.read_csv(tweet_csv_path)
+def load_tweet_csv(tweet_csv_path, overfit=True, shuffle_data=True, overfit_val=5000):
+    if overfit:
+        data = pd.read_csv(tweet_csv_path, nrows=overfit_val)
+    else:
+        data = pd.read_csv(tweet_csv_path)
     labels = data['label'].values
     labels[labels == 0] = -1
     labels[labels == 2] = 0
     labels[labels == 4] = 1
     tweets = data['text'].values
-    if overfit:
+    if shuffle_data:
         indices = np.arange(tweets.shape[0])
         np.random.shuffle(indices)
         tweets = tweets[indices]
         labels = labels[indices]
-        tweets = tweets[0:overfit_val]
-        labels = labels[0:overfit_val]
-        return labels, tweets
+    # if overfit:
+    #     tweets = tweets[0:overfit_val]
+    #     labels = labels[0:overfit_val]
+    #     return labels, tweets
     # tweet_lists = split_tweets_to_lists(tweets.values)
     return labels, tweets
 
@@ -38,22 +42,36 @@ def load_unlabeled_tweet_csv(tweet_csv_path, num_tweets=50000):
     tweets = data['text'].values
     return tweets
 
-def split_data(tweet_csv_path, test_split_percent=0.2, val_split_percent=0.2, overfit=False, overfit_val=5000):
+def split_data(tweet_csv_path, test_split_percent=0.2, val_split_percent=0.2, shuffle=True, overfit=False, overfit_val=5000):
     '''
     Splits Twitter Data into Training, Dev, and Test sets
     returns them as pandas dataframes
     '''
-    labels, tweets = load_tweet_csv(tweet_csv_path, overfit=overfit, overfit_val=overfit_val)
-    indices = np.arange(tweets.shape[0])
-    np.random.shuffle(indices)
-    labels = labels[indices]
-    tweets = tweets[indices]
+    labels, tweets = load_tweet_csv(tweet_csv_path, overfit=overfit, shuffle_data=shuffle, overfit_val=overfit_val)
+    vocab = create_vocab(tweets)
+    # indices = np.arange(tweets.shape[0])
+    # np.random.shuffle(indices)
+    # labels = labels[indices]
+    # tweets = tweets[indices]
     X_train, X_test, y_train, y_test = train_test_split(tweets, labels, test_size=test_split_percent)
     test_data = pd.DataFrame({'label': y_test, 'text':X_test})
     X_train, X_dev, y_train, y_dev = train_test_split(X_train, y_train, test_size=val_split_percent)
     dev_data = pd.DataFrame({'label': y_dev, 'text':X_dev})
     train_data = pd.DataFrame({'label':y_train, 'text':X_train})
-    return train_data, dev_data, test_data
+    return train_data, dev_data, test_data, vocab
+
+
+def create_vocab(tweet_data):
+    vocab = Vocab()
+    for tweet in tweet_data:
+        tokenized_tweet = word_tokenize(tweet)
+        for word in tokenized_tweet:
+            id = vocab.GetID(word.lower())
+    vocab.Lock()
+    return vocab
+
+
+
 
 class Vocab:
     '''
@@ -172,7 +190,13 @@ class TwitterDataset:
         else:
             for item in text_list:
                 # wordlist = tokenizer.encode(item).ids
-                wordlist = [self.vocab.GetID(w.lower()) for w in word_tokenize(item) if self.vocab.GetID(w.lower()) >= 0]
+                word_tokens = word_tokenize(item)
+                wordlist = []
+                for w in word_tokens:
+                    id = self.vocab.GetID(w.lower())
+                    if id >= 0:
+                        wordlist.append(id)
+                # wordlist = [self.vocab.GetID(w.lower()) for w in word_tokenize(item) if self.vocab.GetID(w.lower()) >= 0]
                 id_list.append(wordlist)
         id_list = [torch.LongTensor(id_list[i]) for i in range(0, len(id_list))]
         return id_list
@@ -192,21 +216,21 @@ class TwitterDataset:
         return tweet
 
 
-def load_twitter_data(tweet_filepath, test_split_percent=0.2, val_split_percent=0.2, overfit=False, use_bert=False, overfit_val=500):
+def load_twitter_data(tweet_filepath, test_split_percent=0.2, val_split_percent=0.2, shuffle=True, overfit=False, use_bert=False, overfit_val=500):
     '''
     Loads twitter csv file, splits it into training, dev, and test data
     and returns them as TwitterDataset objects.
 
     '''
     print("Splitting Data")
-    train_data, dev_data, test_data = split_data(tweet_filepath, test_split_percent=test_split_percent, val_split_percent=val_split_percent, overfit=overfit, overfit_val=overfit_val)
-
+    train_data, dev_data, test_data, vocab = split_data(tweet_filepath, test_split_percent=test_split_percent, shuffle=shuffle, val_split_percent=val_split_percent, overfit=overfit, overfit_val=overfit_val)
     print("Converting to Indices")
-    train_dataset = TwitterDataset(train_data, use_bert_tokenizer=use_bert)
     if not use_bert:
-        dev_dataset = TwitterDataset(dev_data, vocab=train_dataset.vocab)
-        test_dataset = TwitterDataset(test_data, vocab=train_dataset.vocab)
+        train_dataset = TwitterDataset(train_data, vocab=vocab)
+        dev_dataset = TwitterDataset(dev_data, vocab=vocab)
+        test_dataset = TwitterDataset(test_data, vocab=vocab)
     else:
+        train_dataset = TwitterDataset(train_data, use_bert_tokenizer=use_bert)
         dev_dataset = TwitterDataset(dev_data, use_bert_tokenizer=use_bert)
         test_dataset = TwitterDataset(test_data, use_bert_tokenizer=use_bert)
     return train_dataset, dev_dataset, test_dataset

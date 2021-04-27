@@ -45,7 +45,7 @@ def label_data(data_samples, vocab):
     List of input tweets selected by sampling strategy to be hand-labeled
     Inputs:
     data_sample: list(tuople) - list of tokenized tweets and their scores that
-    vocab: Vocab - object containing the vocabulary mappings of the tweet data
+    vocab: TwitterDataset - object containing the vocabulary mappings of the tweet data
     Returns:
     list(int) - list of sentiment labels for each tweet (either 0 or 1)
     """
@@ -77,6 +77,7 @@ def least_confidence(model_outputs, num_classes=2):
     Returns: torch.tensor, normalized, least confidence scores for the model's
     class probability distribution
     """
+    probs = torch.exp(model_outputs)
     max_scores, indices = torch.max(model_outputs, dim=1)
     confidence_scores = 1.0 - max_scores
     normalized_scores = confidence_scores*(num_classes/(num_classes - 1))
@@ -163,11 +164,15 @@ def train_active_learning(net, vocab, X_seed, Y_seed, X_unlabeled, dev, num_epoc
     epoch_losses = []
     eval_accuracy = []
     hand_labeled_data = []
-    for epoch in range(num_epochs):
+    print("EPOCH: 0")
+    total_loss, accuracy = train_step(net, X_seed, Y_seed, 0, dev, optimizer, num_classes=num_classes, batchSize=batchSize, use_gpu=use_gpu, device=device)
+    epoch_losses.append(total_loss)
+    eval_accuracy.append(accuracy)
+    for epoch in range(1, num_epochs):
         print("EPOCH: " + str(epoch))
-        total_loss, accuracy = train_step(net, X_seed, Y_seed, epoch, dev, optimizer, num_classes=num_classes, batchSize=batchSize, use_gpu=use_gpu, device=device)
-        epoch_losses.append(total_loss)
-        eval_accuracy.append(accuracy)
+        # total_loss, accuracy = train_step(net, X_seed, Y_seed, epoch, dev, optimizer, num_classes=num_classes, batchSize=batchSize, use_gpu=use_gpu, device=device)
+        # epoch_losses.append(total_loss)
+        # eval_accuracy.append(accuracy)
         if len(X_unlabeled) > 0:
             samples_to_label, X_unlabeled = compute_acquisition_function(net, acquisition_func, X_unlabeled, num_samples=num_samples, batch_size=batchSize, device=device)
             new_labels = label_data(samples_to_label, vocab)
@@ -180,12 +185,15 @@ def train_active_learning(net, vocab, X_seed, Y_seed, X_unlabeled, dev, num_epoc
                 X_seed.append(sample_tensor)
             Y_seed = np.concatenate((Y_seed, new_labels))
             print(Y_seed)
-            index = np.arange(len(X_seed))
-            np.random.shuffle(index) #randomly shuffle words and labels
-            X_seed = [X_seed[i] for i in index]
-            Y_seed = Y_seed[index]
+            # index = np.arange(len(X_seed))
+            # np.random.shuffle(index) #randomly shuffle words and labels
+            # X_seed = [X_seed[i] for i in index]
+            # Y_seed = Y_seed[index]
         else:
             print("All Data Labelled")
+        total_loss, accuracy = train_step(net, X_seed, Y_seed, epoch, dev, optimizer, num_classes=num_classes, batchSize=batchSize, use_gpu=use_gpu, device=device)
+        epoch_losses.append(total_loss)
+        eval_accuracy.append(accuracy)
 
     print("Finished Training")
 
@@ -207,8 +215,9 @@ def main():
 
 
     seed_data_size = args.seed_data_size
-    use_bert = True
-    train_data, dev_data, test_data = load_twitter_data(labeled_twitter_csv_path, test_split_percent=0.1, val_split_percent=0.2, overfit=True, use_bert=use_bert, overfit_val=50000)
+    use_bert = False
+    shuffle = False
+    train_data, dev_data, test_data = load_twitter_data(labeled_twitter_csv_path, test_split_percent=0.1, val_split_percent=0.2, shuffle=shuffle, overfit=True, use_bert=use_bert, overfit_val=12639)
     unlabeled_tweets = load_unlabeled_tweet_csv(unlabeled_twitter_csv_path)
     X_unlabeled = train_data.convert_text_to_ids(unlabeled_tweets)[0:50000]
 
@@ -217,6 +226,9 @@ def main():
     Y_seed = (Y_seed + 1.0)/2.0
 
     print(train_data.vocab_size)
+    print(len(X_seed))
+    print(dev_data.length)
+    print(test_data.length)
 
     cnn_net = CNN(train_data.vocab_size, DIM_EMB=300, NUM_CLASSES = 2)
     if device_type == "gpu" and torch.cuda.is_available():
@@ -225,8 +237,8 @@ def main():
         epoch_losses, eval_accuracy, hand_labeled_data = train_active_learning(cnn_net, train_data,
                                                             X_seed, Y_seed,
                                                             X_unlabeled, dev_data,
-                                                            num_epochs=2, acquisition_func=acquisition_func,
-                                                            lr=0.0035, batchSize=150, num_samples=15,
+                                                            num_epochs=10, acquisition_func=acquisition_func,
+                                                            lr=0.0030, batchSize=150, num_samples=10,
                                                             use_gpu=True, device=device)
         cnn_net.eval()
         print("Test Set")
@@ -238,25 +250,25 @@ def main():
         epoch_losses, eval_accuracy, hand_labeled_data = train_active_learning(cnn_net, train_data,
                                                             X_seed, Y_seed,
                                                             X_unlabeled, dev_data,
-                                                            num_epochs=2, acquisition_func=acquisition_func,
-                                                            lr=0.0035, batchSize=150, num_samples=15,
-                                                            use_gpu=True, device=device)
+                                                            num_epochs=10, acquisition_func=acquisition_func,
+                                                            lr=0.0030, batchSize=150, num_samples=10,
+                                                            use_gpu=False, device=device)
         cnn_net.eval()
         print("Test Set")
-        test_accuracy = eval_network(test_data, cnn_net, use_gpu=True, device=device)
+        test_accuracy = eval_network(test_data, cnn_net, use_gpu=False, device=device)
 
 
     # plot_accuracy((min_accs, eval_accuracy, max_accs), "Sentiment CNN lr=0.001", train_data.length)
-    plot_accuracy(eval_accuracy, "Sentiment CNN (Active Learning) lr=0.0035 " + acquistion_function_type, train_data.length)
-    plot_losses(epoch_losses, "Sentiment CNN (Active Learning) lr=0.0035" + acquistion_function_type, train_data.length)
+    plot_accuracy(eval_accuracy, "Sentiment CNN (Active Learning) lr=0.0030 " + acquistion_function_type, train_data.length)
+    plot_losses(epoch_losses, "Sentiment CNN (Active Learning) lr=0.0030" + acquistion_function_type, train_data.length)
     torch.save(cnn_net.state_dict(), "saved_models\\cnn_active_learn.pth")
-    np.save("cnn_active_learning_train_loss_bert" + acquistion_function_type + "_" + str(seed_data_size) + ".npy", np.array(epoch_losses))
-    np.save("cnn_active_learning_validation_accuracy_bert" + acquistion_function_type + "_" + str(seed_data_size) + ".npy", np.array(eval_accuracy))
+    np.save("cnn_active_learning_train_loss" + acquistion_function_type + "_" + str(seed_data_size) + ".npy", np.array(epoch_losses))
+    np.save("cnn_active_learning_validation_accuracy" + acquistion_function_type + "_" + str(seed_data_size) + ".npy", np.array(eval_accuracy))
 
     human_labels = []
     tweets = []
-    save_labels = False
-    
+    save_labels = True
+
     if save_labels:
         for sample, label in hand_labeled_data:
             tweet, score = sample
