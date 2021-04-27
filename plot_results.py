@@ -62,7 +62,7 @@ def compare_accuracy_results(results_1, results_2, label1="baseline", label2="AL
 
 
 def main():
-    result1_file = "cnn_active_learning_validation_accuracy_bertleast_confidence_9000.npy"
+    result1_file = "cnn_active_learning_validation_accuracyleast_confidence_9000.npy"
     result2_file = "cnn_validation_accuracy_9100.npy"
     result1 = np.load(result1_file)
     result2 = np.load(result2_file)
