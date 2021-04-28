@@ -217,9 +217,11 @@ def train_active_learning(net, vocab, X_seed, Y_seed, X_unlabeled, Y_gt, dev, nu
     print("Finished Training")
 
     return epoch_losses, eval_accuracy, hand_labeled_data
+
 def main():
     sampling_functions = ['random_score', 'entropy_score', 'least_confidence']
     sampling_sizes = [5000, 10000, 15000, 20000]
+    num_active_samples = [10, 25, 50]
 
     args = parse_args()
     # twitter_csv_path = args.tweet_csv_file
@@ -229,46 +231,57 @@ def main():
     seed_data_size = args.seed_data_size
     use_bert = False
     shuffle = False
-    train_data, dev_data, test_data = load_twitter_data(labeled_twitter_csv_path, test_split_percent=0.1, val_split_percent=0.2, shuffle=shuffle, overfit=True, use_bert=use_bert, overfit_val=30000)
-    unlabeled_tweets, ground_truth_labels = load_unlabeled_tweet_csv(unlabeled_twitter_csv_path)
-
-    ground_truth_labels = ground_truth_labels[0:70000]
+    train_data, dev_data, test_data = load_twitter_data(labeled_twitter_csv_path,
+                                                        test_split_percent=0.1,
+                                                        val_split_percent=0.2,
+                                                        shuffle=shuffle,
+                                                        overfit=True, use_bert=use_bert,
+                                                        overfit_val=40000)
+    unlabeled_tweets, ground_truth_labels = load_unlabeled_tweet_csv(unlabeled_twitter_csv_path, num_tweets=45000)
+    X_unlabeled = train_data.convert_text_to_ids(unlabeled_tweets)
+    ground_truth_labels = ground_truth_labels
     ground_truth_labels = (ground_truth_labels + 1.0)/2.0
 
-    X_unlabeled = train_data.convert_text_to_ids(unlabeled_tweets)[0:70000]
-
-
+    test_accuracies = {}
 
     print("Running ablation experiment on sampling functions and seed sizes")
     for af in sampling_functions:
+        if af == 'random_score':
+            acquisition_func = random_score
+        elif af == 'entropy_score':
+            acquisition_func = entropy_score
+        elif af == 'least_confidence':
+            acquisition_func = least_confidence
         for seed_data_size in sampling_sizes:
-            if af == 'random_score':
-                acquisition_func = random_score
-            elif af == 'entropy_score':
-                acquisition_func = entropy_score
-            else:
-                acquisition_func = least_confidence
-            X_seed = train_data.Xwordlist[0:seed_data_size]
-            Y_seed = train_data.labels[0:seed_data_size]
-            Y_seed = (Y_seed + 1.0)/2.0
+            for sample_size in num_active_samples:
+                X_seed = train_data.Xwordlist[0:seed_data_size]
+                Y_seed = train_data.labels[0:seed_data_size]
+                Y_seed = (Y_seed + 1.0)/2.0
+                cnn_net = CNN(train_data.vocab_size, DIM_EMB=300, NUM_CLASSES = 2)
 
-            print(train_data.vocab_size)
-            print(len(X_seed))
-            print(dev_data.length)
-            print(test_data.length)
+                device = torch.device('cuda:0')
+                cnn_net = cnn_net.cuda()
+                print("Train active learning")
+                epoch_losses, eval_accuracy, hand_labeled_data = train_active_learning(cnn_net, train_data,
+                                                                    X_seed, Y_seed,
+                                                                    X_unlabeled, np.copy(ground_truth_labels), dev_data,
+                                                                    num_epochs=8, acquisition_func=acquisition_func,
+                                                                    lr=0.0035, batchSize=150, num_samples=sample_size,
+                                                                    use_gpu=True, device=device)
+                cnn_net.eval()
+                print("Test Set")
+                test_accuracy = eval_network(test_data, cnn_net, use_gpu=True, device=device)
+                param_combo = "CNN Active Learning: " + " Acquisition_Func: " + af + " Seed Size: " + str(seed_data_size) + " Sample Size: " + str(sample_size)
+                test_accuracies[param_combo] = test_accuracy
+                filename = "results_ablation/cnn_active_learning_val_accuracy_" + af + "_" + str(seed_data_size) + "_" + str(sample_size) + ".npy"
+                np.save(filename, np.array(eval_accuracy))
 
-            cnn_net = CNN(train_data.vocab_size, DIM_EMB=300, NUM_CLASSES = 2)
+    print("Finished experiments")
+    with open("ablation_test_accuracies.txt", "w") as f:
+        for key in test_accuracies.keys():
+            accuracy = test_accuracies[key]
+            line = key + " Acc: " + str(accuracy) + "\n"
+            f.write(line)
 
-            device = torch.device('cuda:0')
-            cnn_net = cnn_net.cuda()
-            epoch_losses, eval_accuracy, hand_labeled_data = train_active_learning(cnn_net, train_data,
-                                                                X_seed, Y_seed,
-                                                                X_unlabeled, ground_truth_labels, dev_data,
-                                                                num_epochs=10, acquisition_func=acquisition_func,
-                                                                lr=0.0030, batchSize=150, num_samples=10,
-                                                                use_gpu=True, device=device)
-            cnn_net.eval()
-            print("Test Set")
-            test_accuracy = eval_network(test_data, cnn_net, use_gpu=True, device=device)
-
-            np.save("results_ablation/cnn_active_learning_validation_accuracy" + af + "_" + str(seed_data_size) + ".npy", np.array(eval_accuracy))
+if __name__ == '__main__':
+    main()

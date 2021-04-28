@@ -38,8 +38,11 @@ def load_tweet_csv(tweet_csv_path, overfit=True, shuffle_data=True, overfit_val=
     # tweet_lists = split_tweets_to_lists(tweets.values)
     return labels, tweets
 
-def load_unlabeled_tweet_csv(tweet_csv_path, num_tweets=50000):
-    data = pd.read_csv(tweet_csv_path)
+def load_unlabeled_tweet_csv(tweet_csv_path, all_tweets=False, num_tweets=50000):
+    if all_tweets:
+        data = pd.read_csv(tweet_csv_path)
+    else:
+        data = pd.read_csv(tweet_csv_path, nrows=num_tweets)
     tweets = data['text'].values
     labels = data['label'].values
     labels[labels == 0] = -1
