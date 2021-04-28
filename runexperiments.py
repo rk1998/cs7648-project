@@ -9,6 +9,7 @@ import tqdm
 import argparse
 from train import eval_network, pad_batch_input, convert_to_onehot
 import pandas as pd
+import copy
 
 
 
@@ -25,6 +26,7 @@ def parse_args():
         type=str,
         required=True
     )
+    parser.add_argument("--save_models", dest="save_models", action="store_true")
     args = parser.parse_args()
     return args
 
@@ -219,16 +221,21 @@ def train_active_learning(net, vocab, X_seed, Y_seed, X_unlabeled, Y_gt, dev, nu
     return epoch_losses, eval_accuracy, hand_labeled_data
 
 def main():
+    #parameters
     sampling_functions = ['random_score', 'entropy_score', 'least_confidence']
     sampling_sizes = [5000, 10000, 15000, 20000]
     num_active_samples = [10, 25, 50]
+
+    # sampling_functions = ['least_confidence']
+    # num_active_samples = [25, 50]
+    # sampling_sizes = [20000]
 
     args = parse_args()
     # twitter_csv_path = args.tweet_csv_file
     labeled_twitter_csv_path = args.labeled_tweet_csv_file
     unlabeled_twitter_csv_path = args.unlabeled_tweet_csv_file
+    save_models = args.save_models
 
-    seed_data_size = args.seed_data_size
     use_bert = False
     shuffle = False
     train_data, dev_data, test_data = load_twitter_data(labeled_twitter_csv_path,
@@ -254,6 +261,8 @@ def main():
             acquisition_func = least_confidence
         for seed_data_size in sampling_sizes:
             for sample_size in num_active_samples:
+                param_combo = "Acquisition_Func: " + af + " Seed Size: " + str(seed_data_size) + " Sample Size: " + str(sample_size)
+                print(param_combo + "\n")
                 X_seed = train_data.Xwordlist[0:seed_data_size]
                 Y_seed = train_data.labels[0:seed_data_size]
                 Y_seed = (Y_seed + 1.0)/2.0
@@ -264,13 +273,19 @@ def main():
                 print("Train active learning")
                 epoch_losses, eval_accuracy, hand_labeled_data = train_active_learning(cnn_net, train_data,
                                                                     X_seed, Y_seed,
-                                                                    X_unlabeled, np.copy(ground_truth_labels), dev_data,
+                                                                    copy.deepcopy(X_unlabeled), np.copy(ground_truth_labels), dev_data,
                                                                     num_epochs=8, acquisition_func=acquisition_func,
                                                                     lr=0.0035, batchSize=150, num_samples=sample_size,
                                                                     use_gpu=True, device=device)
+                print("Finished Training")
                 cnn_net.eval()
+
                 print("Test Set")
                 test_accuracy = eval_network(test_data, cnn_net, use_gpu=True, device=device)
+                model_save_path = "model_weights/cnn_active_learn_weights_"+ af + "_" + str(seed_data_size) + "_" + str(sample_size) + ".pth"
+                if save_models:
+                    torch.save(cnn_net.state_dict(), model_save_path)
+
                 param_combo = "CNN Active Learning: " + " Acquisition_Func: " + af + " Seed Size: " + str(seed_data_size) + " Sample Size: " + str(sample_size)
                 test_accuracies[param_combo] = test_accuracy
                 filename = "results_ablation/cnn_active_learning_val_accuracy_" + af + "_" + str(seed_data_size) + "_" + str(sample_size) + ".npy"
