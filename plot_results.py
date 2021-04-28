@@ -78,11 +78,16 @@ def compare_multiple_results(results_list, labels, colors, title="Twitter Datase
 
 
 def main():
-    result1_file = "cnn_active_learning_validation_accuracyleast_confidence_9000.npy"
-    result2_file = "cnn_active_learning_validation_accuracyrandom_9000.npy"
+    result1_file = "cnn_active_learning_validation_accuracyentropy_9000_50.npy"
+    result2_file = "cnn_active_learning_validation_accuracyrandom_9000_50.npy"
+    result3_file = "cnn_active_learning_validation_accuracyleast_confidence_9000_50.npy"
     result1 = np.load(result1_file)
     result2 = np.load(result2_file)
-    compare_accuracy_results(result1, result2, label1="CNN AL (Least Confidence)", label2 = "CNN AL (Random)")
+    result3 = np.load(result3_file)
+    labels = ["CNN AL (Entropy)", "CNN AL (Random)", "CNN AL (LC)"]
+    colors = ["ro-", "bo-", "go-"]
+    # compare_accuracy_results(result1, result2, label1="CNN AL (Entropy)", label2 = "CNN AL (Random)")
+    compare_multiple_results([result1, result2, result3], labels, colors, title="Twitter Dataset Acquisition Func. Comparison")
     # csv_file_path = "metrics.csv"
     # model_name = "LSTM + BERT"
     # plot_results_from_csv(csv_file_path, model_name=model_name)

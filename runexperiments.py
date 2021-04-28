@@ -25,16 +25,6 @@ def parse_args():
         type=str,
         required=True
     )
-    parser.add_argument(
-        "--device",
-        type=str,
-        choices=["cpu", "gpu"],
-        default="cpu",
-    )
-    parser.add_argument("--acquisition_func", type=str, choices=["least_confidence", "random", "entropy"], default="least_confidence")
-    parser.add_argument("--seed_data_size", type=int, default=9000)
-    parser.add_argument("--sample_size", type=int, default=10)
-    parser.add_argument("--manual_label", dest="human_label", action="store_true")
     args = parser.parse_args()
     return args
 
@@ -86,7 +76,7 @@ def entropy_score(model_outputs, num_classes=2):
     Computes the normalized entropy of the model predictions
     Inputs:
     model_outputs: torch.tensor of size (batch_size x 2) - the models log_probs
-    Returns: torch.tensor of size (batch_size), returns normalized entropy scores
+    Returns: torch.tensor of size (batch_size x 2), returns normalized entropy scores
     based upon the model's predicted probabilities for each class
     """
     probs = torch.exp(model_outputs)
@@ -227,99 +217,58 @@ def train_active_learning(net, vocab, X_seed, Y_seed, X_unlabeled, Y_gt, dev, nu
     print("Finished Training")
 
     return epoch_losses, eval_accuracy, hand_labeled_data
-
 def main():
+    sampling_functions = ['random_score', 'entropy_score', 'least_confidence']
+    sampling_sizes = [5000, 10000, 15000, 20000]
+
     args = parse_args()
     # twitter_csv_path = args.tweet_csv_file
     labeled_twitter_csv_path = args.labeled_tweet_csv_file
     unlabeled_twitter_csv_path = args.unlabeled_tweet_csv_file
 
-    device_type = args.device
-    acquistion_function_type = args.acquisition_func
-    human_label = args.manual_label
-
-    if acquistion_function_type == "least_confidence":
-        acquisition_func = least_confidence
-    elif acquistion_function_type == "random":
-        acquisition_func = random_score
-    elif acquistion_function_type == "entropy":
-        acquisition_func = entropy_score
-    else:
-        acquisition_func = least_confidence
-
-
     seed_data_size = args.seed_data_size
     use_bert = False
     shuffle = False
-    train_data, dev_data, test_data = load_twitter_data(labeled_twitter_csv_path, test_split_percent=0.1, val_split_percent=0.2, shuffle=shuffle, overfit=True, use_bert=use_bert, overfit_val=12639)
+    train_data, dev_data, test_data = load_twitter_data(labeled_twitter_csv_path, test_split_percent=0.1, val_split_percent=0.2, shuffle=shuffle, overfit=True, use_bert=use_bert, overfit_val=30000)
     unlabeled_tweets, ground_truth_labels = load_unlabeled_tweet_csv(unlabeled_twitter_csv_path)
 
-    #convert "unlabeled" tweets to token ids
-    X_unlabeled = train_data.convert_text_to_ids(unlabeled_tweets)[0:70000]
     ground_truth_labels = ground_truth_labels[0:70000]
     ground_truth_labels = (ground_truth_labels + 1.0)/2.0
 
-    X_seed = train_data.Xwordlist[0:seed_data_size]
-    Y_seed = train_data.labels[0:seed_data_size]
-    Y_seed = (Y_seed + 1.0)/2.0
-
-    print(train_data.vocab_size)
-    print(len(X_seed))
-    print(dev_data.length)
-    print(test_data.length)
-    num_samples = args.sample_size
-
-    cnn_net = CNN(train_data.vocab_size, DIM_EMB=300, NUM_CLASSES = 2)
-    if device_type == "gpu" and torch.cuda.is_available():
-        device = torch.device('cuda:0')
-        cnn_net = cnn_net.cuda()
-        epoch_losses, eval_accuracy, hand_labeled_data = train_active_learning(cnn_net, train_data,
-                                                            X_seed, Y_seed,
-                                                            X_unlabeled, ground_truth_labels, dev_data,
-                                                            num_epochs=10, acquisition_func=acquisition_func,
-                                                            lr=0.0030, batchSize=150, num_samples=num_samples,
-                                                            use_gpu=True, device=device)
-        cnn_net.eval()
-        print("Test Set")
-        test_accuracy = eval_network(test_data, cnn_net, use_gpu=True, device=device)
-
-    else:
-        device = torch.device('cpu')
-        # cnn_net = cnn_net.cuda()
-        epoch_losses, eval_accuracy, hand_labeled_data = train_active_learning(cnn_net, train_data,
-                                                            X_seed, Y_seed,
-                                                            X_unlabeled, ground_truth_labels, dev_data,
-                                                            num_epochs=10, acquisition_func=acquisition_func,
-                                                            lr=0.0030, batchSize=150, num_samples=num_samples,
-                                                            use_gpu=False, device=device)
-        cnn_net.eval()
-        print("Test Set")
-        test_accuracy = eval_network(test_data, cnn_net, use_gpu=False, device=device)
-
-
-    # plot_accuracy((min_accs, eval_accuracy, max_accs), "Sentiment CNN lr=0.001", train_data.length)
-    plot_accuracy(eval_accuracy, "Sentiment CNN (Active Learning) lr=0.0030 " + acquistion_function_type, seed_data_size)
-    # plot_losses(epoch_losses, "Sentiment CNN (Active Learning) lr=0.0030" + acquistion_function_type, train_data.length)
-    torch.save(cnn_net.state_dict(), "saved_models\\cnn_active_learn.pth")
-    # np.save("cnn_active_learning_train_loss" + acquistion_function_type + "_" + str(seed_data_size) + ".npy", np.array(epoch_losses))
-    np.save("cnn_active_learning_validation_accuracy" + acquistion_function_type + "_" + str(seed_data_size) + "_" + str(num_samples)+".npy", np.array(eval_accuracy))
-
-    human_labels = []
-    tweets = []
-    save_labels = True
-
-    if save_labels:
-        for tweet, label in hand_labeled_data:
-            # tweet, score = sample
-            tweet = train_data.convert_to_words(tweet)
-            tweets.append(tweet)
-            human_labels.append(label)
-
-        new_labeled_tweets = pd.DataFrame({'label':human_labels, 'text':tweets})
-        new_labeled_tweets.to_csv("human_labeled_tweets.csv", header=True, index=False)
+    X_unlabeled = train_data.convert_text_to_ids(unlabeled_tweets)[0:70000]
 
 
 
+    print("Running ablation experiment on sampling functions and seed sizes")
+    for af in sampling_functions:
+        for seed_data_size in sampling_sizes:
+            if af == 'random_score':
+                acquisition_func = random_score
+            elif af == 'entropy_score':
+                acquisition_func = entropy_score
+            else:
+                acquisition_func = least_confidence
+            X_seed = train_data.Xwordlist[0:seed_data_size]
+            Y_seed = train_data.labels[0:seed_data_size]
+            Y_seed = (Y_seed + 1.0)/2.0
 
-if __name__ == '__main__':
-    main()
+            print(train_data.vocab_size)
+            print(len(X_seed))
+            print(dev_data.length)
+            print(test_data.length)
+
+            cnn_net = CNN(train_data.vocab_size, DIM_EMB=300, NUM_CLASSES = 2)
+
+            device = torch.device('cuda:0')
+            cnn_net = cnn_net.cuda()
+            epoch_losses, eval_accuracy, hand_labeled_data = train_active_learning(cnn_net, train_data,
+                                                                X_seed, Y_seed,
+                                                                X_unlabeled, ground_truth_labels, dev_data,
+                                                                num_epochs=10, acquisition_func=acquisition_func,
+                                                                lr=0.0030, batchSize=150, num_samples=10,
+                                                                use_gpu=True, device=device)
+            cnn_net.eval()
+            print("Test Set")
+            test_accuracy = eval_network(test_data, cnn_net, use_gpu=True, device=device)
+
+            np.save("results_ablation/cnn_active_learning_validation_accuracy" + af + "_" + str(seed_data_size) + ".npy", np.array(eval_accuracy))
