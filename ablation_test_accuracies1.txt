@@ -1,0 +1,12 @@
+CNN Active Learning:  Acquisition_Func: tweet_count Seed Size: 5000 Sample Size: 10 Acc: 0.49575
+CNN Active Learning:  Acquisition_Func: tweet_count Seed Size: 5000 Sample Size: 25 Acc: 0.50225
+CNN Active Learning:  Acquisition_Func: tweet_count Seed Size: 5000 Sample Size: 50 Acc: 0.49925
+CNN Active Learning:  Acquisition_Func: tweet_count Seed Size: 10000 Sample Size: 10 Acc: 0.50325
+CNN Active Learning:  Acquisition_Func: tweet_count Seed Size: 10000 Sample Size: 25 Acc: 0.60125
+CNN Active Learning:  Acquisition_Func: tweet_count Seed Size: 10000 Sample Size: 50 Acc: 0.57375
+CNN Active Learning:  Acquisition_Func: tweet_count Seed Size: 15000 Sample Size: 10 Acc: 0.584
+CNN Active Learning:  Acquisition_Func: tweet_count Seed Size: 15000 Sample Size: 25 Acc: 0.5115
+CNN Active Learning:  Acquisition_Func: tweet_count Seed Size: 15000 Sample Size: 50 Acc: 0.6365
+CNN Active Learning:  Acquisition_Func: tweet_count Seed Size: 20000 Sample Size: 10 Acc: 0.50275
+CNN Active Learning:  Acquisition_Func: tweet_count Seed Size: 20000 Sample Size: 25 Acc: 0.59825
+CNN Active Learning:  Acquisition_Func: tweet_count Seed Size: 20000 Sample Size: 50 Acc: 0.624
