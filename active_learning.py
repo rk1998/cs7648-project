@@ -290,7 +290,7 @@ def main():
     seed_data_size = args.seed_data_size
     use_bert = False
     shuffle = False
-    train_data, dev_data, test_data = load_twitter_data(labeled_twitter_csv_path, test_split_percent=0.1, val_split_percent=0.2, shuffle=shuffle, overfit=True, use_bert=use_bert, overfit_val=12639)
+    train_data, dev_data, test_data = load_twitter_data(labeled_twitter_csv_path, test_split_percent=0.1, val_split_percent=0.2, shuffle=shuffle, overfit=True, use_bert=use_bert, overfit_val=40000)
     unlabeled_tweets, ground_truth_labels = load_unlabeled_tweet_csv(unlabeled_twitter_csv_path, num_tweets=70000)
 
     #convert "unlabeled" tweets to token ids
@@ -315,7 +315,7 @@ def main():
         epoch_losses, eval_accuracy, hand_labeled_data = train_active_learning(cnn_net, train_data,
                                                             X_seed, Y_seed,
                                                             X_unlabeled, ground_truth_labels, dev_data, use_model=use_model_acq,
-                                                            num_epochs=2, acquisition_func=acquisition_func,
+                                                            num_epochs=10, human_label=human_label, acquisition_func=acquisition_func,
                                                             lr=0.0030, batchSize=150, num_samples=num_samples,
                                                             use_gpu=True, device=device)
         cnn_net.eval()
@@ -328,7 +328,7 @@ def main():
         epoch_losses, eval_accuracy, hand_labeled_data = train_active_learning(cnn_net, train_data,
                                                             X_seed, Y_seed,
                                                             X_unlabeled, ground_truth_labels, dev_data, use_model=use_model_acq,
-                                                            num_epochs=10, acquisition_func=acquisition_func,
+                                                            num_epochs=10, human_label=human_label, acquisition_func=acquisition_func,
                                                             lr=0.0030, batchSize=150, num_samples=num_samples,
                                                             use_gpu=False, device=device)
         cnn_net.eval()
