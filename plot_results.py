@@ -81,15 +81,18 @@ def main():
 
     result1_file = "results_ablation/cnn_active_learning_val_accuracy_least_confidence_20000_50.npy"
     result2_file = "human_labelling_results/cnn_active_learning_validation_accuracy_least_confidence_20000_50_rk.npy"
+    result3_file = "manual_roy_cnn_active_learning_validation_accuracy_least_confidence_20000_50.npy"
     # result1_file = "cnn_active_learning_validation_accuracyentropy_9000_50.npy"
     # result2_file = "cnn_active_learning_validation_accuracyrandom_9000_50.npy"
-    result3_file = "cnn_active_learning_validation_accuracyleast_confidence_9000_50.npy"
+    # result3_file = "cnn_active_learning_validation_accuracyleast_confidence_9000_50.npy"
     result1 = np.load(result1_file)
     result2 = np.load(result2_file)
     result3 = np.load(result3_file)
+    print(result2.shape)
+    avg_results = (result2 + result3[0:8])/2.0
     labels = ["CNN AL (Entropy)", "CNN AL (Random)", "CNN AL (LC)"]
     colors = ["ro-", "bo-", "go-"]
-    compare_accuracy_results(result1, result2, title="Auto Labeling vs Manual Labeling (Least Confidence)", label1="Least Confidence (Auto Label)", label2 = "Least Confidence (Human Label)")
+    compare_accuracy_results(result1, avg_results, title="Auto Labeling vs Manual Labeling (Least Confidence)", label1="Least Confidence (Auto Label)", label2 = "Least Confidence (Avg. Human Label)")
     # compare_multiple_results([result1, result2, result3], labels, colors, title="Twitter Dataset Acquisition Func. Comparison")
     # csv_file_path = "metrics.csv"
     # model_name = "LSTM + BERT"

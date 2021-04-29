@@ -242,9 +242,9 @@ def train_active_learning(net, vocab, X_seed, Y_seed, X_unlabeled, Y_gt, dev, us
             new_labels = label_data(samples_to_label, vocab, use_human_labels=human_label)
             X_samples = [torch.LongTensor(sample) for sample, score, label in samples_to_label]
             for i in range(len(samples_to_label)):
-                sample, score, label = samples_to_label[i]
+                sample, score, ground_truth_label = samples_to_label[i]
                 label = new_labels[i]
-                hand_labeled_data.append((sample, label))
+                hand_labeled_data.append((sample, label, ground_truth_label))
             for sample_tensor in X_samples:
                 X_seed.append(sample_tensor)
             Y_seed = np.concatenate((Y_seed, new_labels))
@@ -344,18 +344,20 @@ def main():
     np.save("human_labelling_results/cnn_active_learning_validation_accuracy_" + acquistion_function_type + "_" + str(seed_data_size) + "_" + str(num_samples)+".npy", np.array(eval_accuracy))
 
     human_labels = []
+    ground_truth_labels = []
     tweets = []
     save_labels = True
 
     if save_labels:
-        for tweet, label in hand_labeled_data:
+        for tweet, label, ground_truth_label in hand_labeled_data:
             # tweet, score = sample
             tweet = train_data.convert_to_words(tweet)
             tweets.append(tweet)
             human_labels.append(label)
+            ground_truth_labels.append(ground_truth_label)
 
-        new_labeled_tweets = pd.DataFrame({'label':human_labels, 'text':tweets})
-        new_labeled_tweets.to_csv("human_labeled_tweets.csv", header=True, index=False)
+        new_labeled_tweets = pd.DataFrame({'label':human_labels, 'ground truth':ground_truth_labels, 'text':tweets})
+        new_labeled_tweets.to_csv("human_labeled_tweets_lc_rk.csv", header=True, index=False)
 
 
 
