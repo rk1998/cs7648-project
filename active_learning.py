@@ -15,13 +15,13 @@ import pandas as pd
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--labeled_tweet_csv_file",
+        "--labeled",
         type=str,
         required=True,
     )
 
     parser.add_argument(
-        "--unlabeled_tweet_csv_file",
+        "--unlabeled",
         type=str,
         required=True
     )
@@ -31,8 +31,8 @@ def parse_args():
         choices=["cpu", "gpu"],
         default="cpu",
     )
-    parser.add_argument("--acquisition_func", type=str, choices=["least_confidence", "random", "entropy", "tweet_count"], default="least_confidence")
-    parser.add_argument("--seed_data_size", type=int, default=9000)
+    parser.add_argument("--acquisition_func", type=str, choices=["least_confidence", "random", "entropy", "tweet_count","most_common_words"], default="least_confidence")
+    parser.add_argument("--seed_size", type=int, default=9000)
     parser.add_argument("--sample_size", type=int, default=10)
     parser.add_argument("--manual_label", dest="human_label", action="store_true")
     args = parser.parse_args()
@@ -84,23 +84,42 @@ def tweet_count_norm(X, vocab):
         count_vector = np.array(vocab.get_word_counts(tweet_i))
         norm_count_vector = np.linalg.norm(count_vector)
         scores.append(norm_count_vector)
+    #import pdb; pdb.set_trace()
     return scores
 
-def inv_tweet_count_norm(X, vocab):
+def most_common_words(X, vocab):
     """
     Acquisition score is computed by looking at the count vector of a tweet
     and computing the inverse of the norm
     """
     scores = []
+    overall = {}
     for i in range(len(X)):
         tweet_i = X[i]
-        count_vector = np.array(vocab.get_word_counts(tweet_i))
-        norm_count_vector = np.linalg.norm(count_vector)
-        if norm_count_vector > 0.0:
-            inv_norm = 1.0/norm_count_vector
-        else:
-            inv_norm = norm_count_vector
-        scores.append(norm_count_vector)
+        for word in tweet_i.tolist():
+            if word in overall:
+                overall[word] += 1
+            else:
+                overall[word] = 1
+    vals = list(overall.values())
+    mx = max(vals) if vals else 1
+    vals = [val/mx for val in vals]
+    keys = list(overall.keys())
+    scoring_dict = dict(zip(keys,vals))
+    """idxs = np.argsort(list(overall.values()))
+    new_keys = [list(overall.keys())[ind] for ind in idxs]
+    most_common = new_keys[0:19]
+    for tweet in X:
+        score = 0
+        for word in tweet.tolist():
+            if word in most_common: score += 1
+        scores.append(score)"""
+    for tweet in X:
+        score = 0
+        for word in tweet.tolist():
+            score += scoring_dict[word]
+        scores.append(score)
+    #import pdb;pdb.set_trace()    
     return scores
 
 def random_score(model_outputs):
@@ -175,7 +194,7 @@ def compute_acquisition_function(model, acquisition_function, X, labels, vocab, 
         for j in range(0, len(batch_sentences)):
             input_sentence = batch_sentences[j]
             input_sentence = input_sentence.tolist()
-            score = acquisition_scores[j].item()
+            score = acquisition_scores[j].item() if not (isinstance(acquisition_scores[j],int) or isinstance(acquisition_scores[j],float)) else acquisition_scores[j]
             label = batch_labels[j]
             scored_samples.append((input_sentence, score, label))
 
@@ -248,7 +267,7 @@ def train_active_learning(net, vocab, X_seed, Y_seed, X_unlabeled, Y_gt, dev, us
             for sample_tensor in X_samples:
                 X_seed.append(sample_tensor)
             Y_seed = np.concatenate((Y_seed, new_labels))
-            print(Y_seed)
+            #print(Y_seed)
             index = np.arange(len(X_seed))
             np.random.shuffle(index) #randomly shuffle words and labels
             X_seed = [X_seed[i] for i in index]
@@ -266,8 +285,8 @@ def train_active_learning(net, vocab, X_seed, Y_seed, X_unlabeled, Y_gt, dev, us
 def main():
     args = parse_args()
     # twitter_csv_path = args.tweet_csv_file
-    labeled_twitter_csv_path = args.labeled_tweet_csv_file
-    unlabeled_twitter_csv_path = args.unlabeled_tweet_csv_file
+    labeled_twitter_csv_path = args.labeled
+    unlabeled_twitter_csv_path = args.unlabeled
 
     device_type = args.device
     acquistion_function_type = args.acquisition_func
@@ -278,6 +297,9 @@ def main():
         acquisition_func = least_confidence
     elif acquistion_function_type == "random":
         acquisition_func = random_score
+    elif acquistion_function_type == "most_common_words":
+        acquisition_func = most_common_words
+        use_model_acq = False
     elif acquistion_function_type == "entropy":
         acquisition_func = entropy_score
     elif acquistion_function_type == "tweet_count":
@@ -287,11 +309,11 @@ def main():
         acquisition_func = least_confidence
 
 
-    seed_data_size = args.seed_data_size
+    seed_data_size = args.seed_size
     use_bert = False
     shuffle = False
-    train_data, dev_data, test_data = load_twitter_data(labeled_twitter_csv_path, test_split_percent=0.1, val_split_percent=0.2, shuffle=shuffle, overfit=True, use_bert=use_bert, overfit_val=40000)
-    unlabeled_tweets, ground_truth_labels = load_unlabeled_tweet_csv(unlabeled_twitter_csv_path, num_tweets=45000)
+    train_data, dev_data, test_data = load_twitter_data(labeled_twitter_csv_path, test_split_percent=0.1, val_split_percent=0.2, shuffle=shuffle, overfit=True, use_bert=use_bert, overfit_val=12639)
+    unlabeled_tweets, ground_truth_labels = load_unlabeled_tweet_csv(unlabeled_twitter_csv_path, num_tweets=70000)
 
     #convert "unlabeled" tweets to token ids
     X_unlabeled = train_data.convert_text_to_ids(unlabeled_tweets)
@@ -315,8 +337,8 @@ def main():
         epoch_losses, eval_accuracy, hand_labeled_data = train_active_learning(cnn_net, train_data,
                                                             X_seed, Y_seed,
                                                             X_unlabeled, ground_truth_labels, dev_data, use_model=use_model_acq,
-                                                            num_epochs=8, human_label=human_label, acquisition_func=acquisition_func,
-                                                            lr=0.0035, batchSize=150, num_samples=num_samples,
+                                                            num_epochs=10, acquisition_func=acquisition_func,
+                                                            lr=0.0030, batchSize=150, num_samples=num_samples,
                                                             use_gpu=True, device=device)
         cnn_net.eval()
         print("Test Set")
@@ -328,8 +350,8 @@ def main():
         epoch_losses, eval_accuracy, hand_labeled_data = train_active_learning(cnn_net, train_data,
                                                             X_seed, Y_seed,
                                                             X_unlabeled, ground_truth_labels, dev_data, use_model=use_model_acq,
-                                                            num_epochs=8, human_label=human_label, acquisition_func=acquisition_func,
-                                                            lr=0.0035, batchSize=150, num_samples=num_samples,
+                                                            num_epochs=10, acquisition_func=acquisition_func,
+                                                            lr=0.0030, batchSize=150, num_samples=num_samples,
                                                             use_gpu=False, device=device)
         cnn_net.eval()
         print("Test Set")
@@ -337,11 +359,11 @@ def main():
 
 
     # plot_accuracy((min_accs, eval_accuracy, max_accs), "Sentiment CNN lr=0.001", train_data.length)
-    plot_accuracy(eval_accuracy, "Sentiment CNN (Active Learning) lr=0.0035 " + acquistion_function_type, seed_data_size)
+    plot_accuracy(eval_accuracy, "Sentiment CNN (Active Learning) lr=0.0030 " + acquistion_function_type, seed_data_size)
     # plot_losses(epoch_losses, "Sentiment CNN (Active Learning) lr=0.0030" + acquistion_function_type, train_data.length)
     torch.save(cnn_net.state_dict(), "saved_models\\cnn_active_learn.pth")
     # np.save("cnn_active_learning_train_loss" + acquistion_function_type + "_" + str(seed_data_size) + ".npy", np.array(epoch_losses))
-    np.save("human_labelling_results/cnn_active_learning_validation_accuracy_" + acquistion_function_type + "_" + str(seed_data_size) + "_" + str(num_samples)+".npy", np.array(eval_accuracy))
+    np.save("cnn_active_learning_validation_accuracy_" + acquistion_function_type + "_" + str(seed_data_size) + "_" + str(num_samples)+".npy", np.array(eval_accuracy))
 
     human_labels = []
     tweets = []
