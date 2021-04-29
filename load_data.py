@@ -90,6 +90,7 @@ class Vocab:
         self.nextId = 0
         self.word2id = {}
         self.id2word = {}
+        self.word_counts = Counter()
         if vocabFile:
             for line in open(vocabFile):
                 line = line.rstrip('\n')
@@ -103,6 +104,7 @@ class Vocab:
             if self.locked:
                 return -1        #UNK token is -1.
             else:
+                self.word_counts[word] += 1
                 self.word2id[word] = self.nextId
                 self.id2word[self.word2id[word]] = word
                 self.nextId += 1
@@ -222,6 +224,10 @@ class TwitterDataset:
                     output = output + " " + word_i
             return output
         return tweet
+
+    def get_word_counts(self, word_ids):
+        counts = [self.vocab.word_counts[self.vocab.id2word[id.item()]] for id in word_ids]
+        return counts
 
 
 def load_twitter_data(tweet_filepath, test_split_percent=0.2, val_split_percent=0.2, shuffle=True, overfit=False, use_bert=False, overfit_val=500):

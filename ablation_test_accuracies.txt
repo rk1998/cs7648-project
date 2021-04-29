@@ -1,0 +1,4 @@
+CNN Active Learning:  Acquisition_Func: least_confidence Seed Size: 15000 Sample Size: 50 Acc: 0.60525
+CNN Active Learning:  Acquisition_Func: least_confidence Seed Size: 20000 Sample Size: 10 Acc: 0.63575
+CNN Active Learning:  Acquisition_Func: least_confidence Seed Size: 20000 Sample Size: 25 Acc: 0.57825
+CNN Active Learning:  Acquisition_Func: least_confidence Seed Size: 20000 Sample Size: 50 Acc: 0.67175

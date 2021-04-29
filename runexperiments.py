@@ -63,6 +63,20 @@ def label_data(data_samples, vocab, use_human_labels=False):
     print(labels)
     return labels
 
+def tweet_count_norm(X, vocab):
+    """
+    Acquisition score is computed by looking at the count vector of a tweet
+    and computing its norm
+    """
+    scores = []
+    for i in range(len(X)):
+        tweet_i = X[i]
+        count_vector = np.array(vocab.get_word_counts(tweet_i))
+        norm_count_vector = np.linalg.norm(count_vector)
+        scores.append(norm_count_vector)
+    return scores
+
+
 def random_score(model_outputs):
     """
     Acquisition Function for Active Learning Pipeline
@@ -102,7 +116,7 @@ def least_confidence(model_outputs, num_classes=2):
     normalized_scores = confidence_scores*(num_classes/(num_classes - 1))
     return normalized_scores
 
-def compute_acquisition_function(model, acquisition_function, X, labels, num_samples=100, batch_size=50, reverse=True, device=torch.device('cpu')):
+def compute_acquisition_function(model, acquisition_function, X, labels, vocab, use_model=True, num_samples=100, batch_size=50, reverse=False, device=torch.device('cpu')):
     """
     Computes the acquisition_function on the unlabeled data samples to
     determine which samples will be hand labeled.
@@ -127,8 +141,11 @@ def compute_acquisition_function(model, acquisition_function, X, labels, num_sam
         batch_sentences = X[batch:batch + batch_size]
         batch_labels = labels[batch:batch+batch_size]
         padded_batch = pad_batch_input(batch_sentences, device=device)
-        batch_scores = model.forward(padded_batch)
-        acquisition_scores = acquisition_function(batch_scores)
+        if use_model:
+            batch_scores = model.forward(padded_batch)
+            acquisition_scores = acquisition_function(batch_scores)
+        else:
+            acquisition_scores = acquisition_function(batch_sentences, vocab)
         for j in range(0, len(batch_sentences)):
             input_sentence = batch_sentences[j]
             input_sentence = input_sentence.tolist()
@@ -175,7 +192,7 @@ def train_step(net, X, Y, epoch_num, dev, optimizer, num_classes=2, batchSize=50
 
 
 
-def train_active_learning(net, vocab, X_seed, Y_seed, X_unlabeled, Y_gt, dev, num_epochs=15, human_label=False, acquisition_func=least_confidence, lr=0.001, batchSize=50, num_samples=100, use_gpu=False, device=torch.device('cpu')):
+def train_active_learning(net, vocab, X_seed, Y_seed, X_unlabeled, Y_gt, dev, use_model=True, num_epochs=15, human_label=False, acquisition_func=least_confidence, lr=0.001, batchSize=50, num_samples=100, use_gpu=False, device=torch.device('cpu')):
     """
     Main active learning training loop
     """
@@ -195,7 +212,7 @@ def train_active_learning(net, vocab, X_seed, Y_seed, X_unlabeled, Y_gt, dev, nu
         # epoch_losses.append(total_loss)
         # eval_accuracy.append(accuracy)
         if len(X_unlabeled) > 0:
-            samples_to_label, X_unlabeled, Y_gt = compute_acquisition_function(net, acquisition_func, X_unlabeled, Y_gt, num_samples=num_samples, batch_size=batchSize, device=device)
+            samples_to_label, X_unlabeled, Y_gt = compute_acquisition_function(net, acquisition_func, X_unlabeled, Y_gt, vocab, use_model=use_model, num_samples=num_samples, batch_size=batchSize, device=device)
             new_labels = label_data(samples_to_label, vocab, use_human_labels=human_label)
             X_samples = [torch.LongTensor(sample) for sample, score, label in samples_to_label]
             for i in range(len(samples_to_label)):
@@ -222,7 +239,8 @@ def train_active_learning(net, vocab, X_seed, Y_seed, X_unlabeled, Y_gt, dev, nu
 
 def main():
     #parameters
-    sampling_functions = ['random_score', 'entropy_score', 'least_confidence']
+    # sampling_functions = ['random_score', 'entropy_score', 'least_confidence']
+    sampling_functions = ['tweet_count']
     sampling_sizes = [5000, 10000, 15000, 20000]
     num_active_samples = [10, 25, 50]
 
@@ -252,6 +270,7 @@ def main():
     test_accuracies = {}
 
     print("Running ablation experiment on sampling functions and seed sizes")
+    use_model=True
     for af in sampling_functions:
         if af == 'random_score':
             acquisition_func = random_score
@@ -259,6 +278,9 @@ def main():
             acquisition_func = entropy_score
         elif af == 'least_confidence':
             acquisition_func = least_confidence
+        elif af == 'tweet_count':
+            acquisition_func = tweet_count_norm
+            use_model=False
         for seed_data_size in sampling_sizes:
             for sample_size in num_active_samples:
                 param_combo = "Acquisition_Func: " + af + " Seed Size: " + str(seed_data_size) + " Sample Size: " + str(sample_size)
@@ -274,7 +296,7 @@ def main():
                 epoch_losses, eval_accuracy, hand_labeled_data = train_active_learning(cnn_net, train_data,
                                                                     X_seed, Y_seed,
                                                                     copy.deepcopy(X_unlabeled), np.copy(ground_truth_labels), dev_data,
-                                                                    num_epochs=8, acquisition_func=acquisition_func,
+                                                                    num_epochs=8, use_model=use_model, acquisition_func=acquisition_func,
                                                                     lr=0.0035, batchSize=150, num_samples=sample_size,
                                                                     use_gpu=True, device=device)
                 print("Finished Training")
@@ -292,7 +314,7 @@ def main():
                 np.save(filename, np.array(eval_accuracy))
 
     print("Finished experiments")
-    with open("ablation_test_accuracies.txt", "w") as f:
+    with open("ablation_test_accuracies1.txt", "w") as f:
         for key in test_accuracies.keys():
             accuracy = test_accuracies[key]
             line = key + " Acc: " + str(accuracy) + "\n"
