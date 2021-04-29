@@ -50,11 +50,11 @@ def plot_losses(loss_results, model_name, training_set_size):
     plt.show()
 
 
-def compare_accuracy_results(results_1, results_2, label1="baseline", label2="AL (Least Confidence)"):
+def compare_accuracy_results(results_1, results_2, title="Twitter Dataset Accuracy Comparison", label1="baseline", label2="AL (Least Confidence)"):
     plt.figure()
     plt.plot(results_1, "ro-", label=label1)
     plt.plot(results_2, "bo-", label=label2)
-    plt.title("Twitter Dataset Accuracy Comparison")
+    plt.title(title)
     plt.xlabel("Epochs")
     plt.ylabel("Validation Accuracy")
     plt.legend()
@@ -78,16 +78,19 @@ def compare_multiple_results(results_list, labels, colors, title="Twitter Datase
 
 
 def main():
-    result1_file = "cnn_active_learning_validation_accuracyentropy_9000_50.npy"
-    result2_file = "cnn_active_learning_validation_accuracyrandom_9000_50.npy"
+
+    result1_file = "results_ablation/cnn_active_learning_val_accuracy_least_confidence_20000_50.npy"
+    result2_file = "human_labelling_results/cnn_active_learning_validation_accuracy_least_confidence_20000_50_rk.npy"
+    # result1_file = "cnn_active_learning_validation_accuracyentropy_9000_50.npy"
+    # result2_file = "cnn_active_learning_validation_accuracyrandom_9000_50.npy"
     result3_file = "cnn_active_learning_validation_accuracyleast_confidence_9000_50.npy"
     result1 = np.load(result1_file)
     result2 = np.load(result2_file)
     result3 = np.load(result3_file)
     labels = ["CNN AL (Entropy)", "CNN AL (Random)", "CNN AL (LC)"]
     colors = ["ro-", "bo-", "go-"]
-    # compare_accuracy_results(result1, result2, label1="CNN AL (Entropy)", label2 = "CNN AL (Random)")
-    compare_multiple_results([result1, result2, result3], labels, colors, title="Twitter Dataset Acquisition Func. Comparison")
+    compare_accuracy_results(result1, result2, title="Auto Labeling vs Manual Labeling (Least Confidence)", label1="Least Confidence (Auto Label)", label2 = "Least Confidence (Human Label)")
+    # compare_multiple_results([result1, result2, result3], labels, colors, title="Twitter Dataset Acquisition Func. Comparison")
     # csv_file_path = "metrics.csv"
     # model_name = "LSTM + BERT"
     # plot_results_from_csv(csv_file_path, model_name=model_name)
