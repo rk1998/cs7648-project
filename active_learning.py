@@ -31,7 +31,7 @@ def parse_args():
         choices=["cpu", "gpu"],
         default="cpu",
     )
-    parser.add_argument("--acquisition_func", type=str, choices=["least_confidence", "random", "entropy", "tweet_count","most_common_words"], default="least_confidence")
+    parser.add_argument("--acquisition_func", type=str, choices=["least_confidence", "random", "entropy", "tweet_count","most_common_words","lc_mcw","least_common_words","lc_lcw"], default="least_confidence")
     parser.add_argument("--seed_size", type=int, default=9000)
     parser.add_argument("--sample_size", type=int, default=10)
     parser.add_argument("--manual_label", dest="human_label", action="store_true")
@@ -101,24 +101,63 @@ def most_common_words(X, vocab):
                 overall[word] += 1
             else:
                 overall[word] = 1
-    vals = list(overall.values())
+    """vals = list(overall.values())
     mx = max(vals) if vals else 1
     vals = [val/mx for val in vals]
     keys = list(overall.keys())
-    scoring_dict = dict(zip(keys,vals))
-    """idxs = np.argsort(list(overall.values()))
+    scoring_dict = dict(zip(keys,vals))"""
+    idxs = np.argsort(list(overall.values()))
     new_keys = [list(overall.keys())[ind] for ind in idxs]
     most_common = new_keys[0:19]
     for tweet in X:
         score = 0
         for word in tweet.tolist():
             if word in most_common: score += 1
-        scores.append(score)"""
-    for tweet in X:
+        scores.append(score)
+    mx = max(scores)
+    scores = [score/mx for score in scores]
+    """for tweet in X:
         score = 0
         for word in tweet.tolist():
             score += scoring_dict[word]
+        scores.append(score)"""
+    #import pdb;pdb.set_trace()    
+    return scores
+
+def least_common_words(X, vocab):
+    """
+    Acquisition score is computed by looking at the count vector of a tweet
+    and computing the inverse of the norm
+    """
+    scores = []
+    overall = {}
+    for i in range(len(X)):
+        tweet_i = X[i]
+        for word in tweet_i.tolist():
+            if word in overall:
+                overall[word] += 1
+            else:
+                overall[word] = 1
+    """vals = list(overall.values())
+    mx = max(vals) if vals else 1
+    vals = [val/mx for val in vals]
+    keys = list(overall.keys())
+    scoring_dict = dict(zip(keys,vals))"""
+    idxs = np.argsort(list(overall.values()))[::-1]
+    new_keys = [list(overall.keys())[ind] for ind in idxs]
+    most_common = new_keys[0:19]
+    for tweet in X:
+        score = 0
+        for word in tweet.tolist():
+            if word in most_common: score += 1
         scores.append(score)
+    mx = max(scores)
+    scores = [score/mx for score in scores]
+    """for tweet in X:
+        score = 0
+        for word in tweet.tolist():
+            score += scoring_dict[word]
+        scores.append(score)"""
     #import pdb;pdb.set_trace()    
     return scores
 
@@ -159,7 +198,14 @@ def least_confidence(model_outputs, num_classes=2):
     max_scores, indices = torch.max(probs, dim=1)
     confidence_scores = 1.0 - max_scores
     normalized_scores = confidence_scores*(num_classes/(num_classes - 1))
+    #import pdb;pdb.set_trace()
     return normalized_scores
+
+def lc_mcw():
+    return
+
+def lc_lcw():
+    return
 
 def compute_acquisition_function(model, acquisition_function, X, labels, vocab, use_model=True, num_samples=100, batch_size=50, reverse=True, device=torch.device('cpu')):
     """
@@ -188,7 +234,15 @@ def compute_acquisition_function(model, acquisition_function, X, labels, vocab, 
         padded_batch = pad_batch_input(batch_sentences, device=device)
         if use_model:
             batch_scores = model.forward(padded_batch)
-            acquisition_scores = acquisition_function(batch_scores)
+            if acquisition_function.__name__ == "lc_mcw":
+                acquisition_scores_1 = least_confidence(batch_scores).tolist()
+                acquisition_scores_2 = most_common_words(batch_sentences,vocab)
+                acquisition_scores = [acquisition_scores_1[i] * acquisition_scores_2[i] for i in range(len(acquisition_scores_1))]
+            elif acquisition_function.__name__ == "lc_lcw":
+                acquisition_scores_1 = least_confidence(batch_scores).tolist()
+                acquisition_scores_2 = least_common_words(batch_sentences,vocab)
+                acquisition_scores = [acquisition_scores_1[i] * acquisition_scores_2[i] for i in range(len(acquisition_scores_1))]
+            else: acquisition_scores = acquisition_function(batch_scores)
         else:
             acquisition_scores = acquisition_function(batch_sentences, vocab)
         for j in range(0, len(batch_sentences)):
@@ -300,8 +354,15 @@ def main():
     elif acquistion_function_type == "most_common_words":
         acquisition_func = most_common_words
         use_model_acq = False
+    elif acquistion_function_type == "least_common_words":
+        acquisition_func = most_common_words
+        use_model_acq = False
     elif acquistion_function_type == "entropy":
         acquisition_func = entropy_score
+    elif acquistion_function_type == "lc_mcw":
+        acquisition_func = lc_mcw
+    elif acquistion_function_type == "lc_lcw":
+        acquisition_func = lc_mcw
     elif acquistion_function_type == "tweet_count":
         acquisition_func = tweet_count_norm
         use_model_acq = False
@@ -312,7 +373,7 @@ def main():
     seed_data_size = args.seed_size
     use_bert = False
     shuffle = False
-    train_data, dev_data, test_data = load_twitter_data(labeled_twitter_csv_path, test_split_percent=0.1, val_split_percent=0.2, shuffle=shuffle, overfit=True, use_bert=use_bert, overfit_val=12639)
+    train_data, dev_data, test_data = load_twitter_data(labeled_twitter_csv_path, test_split_percent=0.1, val_split_percent=0.2, shuffle=shuffle, overfit=True, use_bert=use_bert, overfit_val=30000)
     unlabeled_tweets, ground_truth_labels = load_unlabeled_tweet_csv(unlabeled_twitter_csv_path, num_tweets=70000)
 
     #convert "unlabeled" tweets to token ids
