@@ -63,6 +63,8 @@ def label_data(data_samples, vocab, use_human_labels=False):
     print(labels)
     return labels
 
+
+
 def tweet_count_norm(X, vocab):
     """
     Acquisition score is computed by looking at the count vector of a tweet
@@ -74,8 +76,82 @@ def tweet_count_norm(X, vocab):
         count_vector = np.array(vocab.get_word_counts(tweet_i))
         norm_count_vector = np.linalg.norm(count_vector)
         scores.append(norm_count_vector)
+    #import pdb; pdb.set_trace()
     return scores
 
+def most_common_words(X, vocab):
+    """
+    Acquisition score is computed by looking at the count vector of a tweet
+    and computing the inverse of the norm
+    """
+    scores = []
+    overall = {}
+    for i in range(len(X)):
+        tweet_i = X[i]
+        for word in tweet_i.tolist():
+            if word in overall:
+                overall[word] += 1
+            else:
+                overall[word] = 1
+    """vals = list(overall.values())
+    mx = max(vals) if vals else 1
+    vals = [val/mx for val in vals]
+    keys = list(overall.keys())
+    scoring_dict = dict(zip(keys,vals))"""
+    idxs = np.argsort(list(overall.values()))
+    new_keys = [list(overall.keys())[ind] for ind in idxs]
+    most_common = new_keys[0:19]
+    for tweet in X:
+        score = 0
+        for word in tweet.tolist():
+            if word in most_common: score += 1
+        scores.append(score)
+    mx = max(scores)
+    scores = [score/mx for score in scores]
+    """for tweet in X:
+        score = 0
+        for word in tweet.tolist():
+            score += scoring_dict[word]
+        scores.append(score)"""
+    #import pdb;pdb.set_trace()
+    return scores
+
+def least_common_words(X, vocab):
+    """
+    Acquisition score is computed by looking at the count vector of a tweet
+    and computing the inverse of the norm
+    """
+    scores = []
+    overall = {}
+    for i in range(len(X)):
+        tweet_i = X[i]
+        for word in tweet_i.tolist():
+            if word in overall:
+                overall[word] += 1
+            else:
+                overall[word] = 1
+    """vals = list(overall.values())
+    mx = max(vals) if vals else 1
+    vals = [val/mx for val in vals]
+    keys = list(overall.keys())
+    scoring_dict = dict(zip(keys,vals))"""
+    idxs = np.argsort(list(overall.values()))[::-1]
+    new_keys = [list(overall.keys())[ind] for ind in idxs]
+    most_common = new_keys[0:19]
+    for tweet in X:
+        score = 0
+        for word in tweet.tolist():
+            if word in most_common: score += 1
+        scores.append(score)
+    mx = max(scores)
+    scores = [score/mx for score in scores]
+    """for tweet in X:
+        score = 0
+        for word in tweet.tolist():
+            score += scoring_dict[word]
+        scores.append(score)"""
+    #import pdb;pdb.set_trace()
+    return scores
 
 def random_score(model_outputs):
     """
@@ -92,7 +168,7 @@ def entropy_score(model_outputs, num_classes=2):
     Computes the normalized entropy of the model predictions
     Inputs:
     model_outputs: torch.tensor of size (batch_size x 2) - the models log_probs
-    Returns: torch.tensor of size (batch_size x 2), returns normalized entropy scores
+    Returns: torch.tensor of size (batch_size), returns normalized entropy scores
     based upon the model's predicted probabilities for each class
     """
     probs = torch.exp(model_outputs)
@@ -114,9 +190,16 @@ def least_confidence(model_outputs, num_classes=2):
     max_scores, indices = torch.max(probs, dim=1)
     confidence_scores = 1.0 - max_scores
     normalized_scores = confidence_scores*(num_classes/(num_classes - 1))
+    #import pdb;pdb.set_trace()
     return normalized_scores
 
-def compute_acquisition_function(model, acquisition_function, X, labels, vocab, use_model=True, num_samples=100, batch_size=50, reverse=False, device=torch.device('cpu')):
+def lc_mcw():
+    return
+
+def lc_lcw():
+    return
+
+def compute_acquisition_function(model, acquisition_function, X, labels, vocab, use_model=True, num_samples=100, batch_size=50, reverse=True, device=torch.device('cpu')):
     """
     Computes the acquisition_function on the unlabeled data samples to
     determine which samples will be hand labeled.
@@ -143,13 +226,22 @@ def compute_acquisition_function(model, acquisition_function, X, labels, vocab, 
         padded_batch = pad_batch_input(batch_sentences, device=device)
         if use_model:
             batch_scores = model.forward(padded_batch)
-            acquisition_scores = acquisition_function(batch_scores)
+            if acquisition_function.__name__ == "lc_mcw":
+                acquisition_scores_1 = least_confidence(batch_scores).tolist()
+                acquisition_scores_2 = most_common_words(batch_sentences,vocab)
+                acquisition_scores = [acquisition_scores_1[i] * acquisition_scores_2[i] for i in range(len(acquisition_scores_1))]
+            elif acquisition_function.__name__ == "lc_lcw":
+                acquisition_scores_1 = least_confidence(batch_scores).tolist()
+                acquisition_scores_2 = least_common_words(batch_sentences,vocab)
+                acquisition_scores = [acquisition_scores_1[i] * acquisition_scores_2[i] for i in range(len(acquisition_scores_1))]
+            else:
+                acquisition_scores = acquisition_function(batch_scores)
         else:
             acquisition_scores = acquisition_function(batch_sentences, vocab)
         for j in range(0, len(batch_sentences)):
             input_sentence = batch_sentences[j]
             input_sentence = input_sentence.tolist()
-            score = acquisition_scores[j].item()
+            score = acquisition_scores[j].item() if not (isinstance(acquisition_scores[j],int) or isinstance(acquisition_scores[j],float)) else acquisition_scores[j]
             label = batch_labels[j]
             scored_samples.append((input_sentence, score, label))
 
@@ -240,7 +332,8 @@ def train_active_learning(net, vocab, X_seed, Y_seed, X_unlabeled, Y_gt, dev, us
 def main():
     #parameters
     # sampling_functions = ['random_score', 'entropy_score', 'least_confidence']
-    sampling_functions = ['tweet_count']
+    # sampling_functions = ['tweet_count']
+    sampling_functions = ["lc_mcw"]
     sampling_sizes = [5000, 10000, 15000, 20000]
     num_active_samples = [10, 25, 50]
 
@@ -281,6 +374,9 @@ def main():
         elif af == 'tweet_count':
             acquisition_func = tweet_count_norm
             use_model=False
+        elif af == 'lc_mcw':
+            acquisition_func = lc_mcw
+
         for seed_data_size in sampling_sizes:
             for sample_size in num_active_samples:
                 param_combo = "Acquisition_Func: " + af + " Seed Size: " + str(seed_data_size) + " Sample Size: " + str(sample_size)
